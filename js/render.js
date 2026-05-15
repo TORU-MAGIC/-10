@@ -163,6 +163,39 @@ function focusOnCell(row,col,smooth){
 function focusOnUnit(u,smooth){if(u)focusOnCell(u.row,u.col,smooth!==false);}
 var cpuFocusUnit=null;
 
+/* ===== リモートカーソル（オンライン他プレイヤー操作位置の追従＋表示） ===== */
+var remoteCursor=null; // {row,col,seat,t,fadeTimer}
+var _remoteCursorRaf=null;
+function handleRemoteCursor(data){
+  if(!data||typeof data.row!=='number'||typeof data.col!=='number')return;
+  remoteCursor={row:data.row,col:data.col,seat:data.seat||0,t:Date.now(),fade:1};
+  // カメラを滑らかに追従
+  focusOnCell(data.row,data.col,true);
+  render();
+  // 数秒後に自動フェードアウト
+  if(_remoteCursorRaf)clearTimeout(_remoteCursorRaf);
+  _remoteCursorRaf=setTimeout(function(){remoteCursor=null;render();},3500);
+}
+function drawRemoteCursor(c){
+  if(!remoteCursor)return;
+  var elapsed=Date.now()-remoteCursor.t;
+  var fade=Math.max(0,1-elapsed/3500);
+  var pc=PCOLS[remoteCursor.seat]||{main:'#fff',light:'#fff'};
+  var x=remoteCursor.col*TW,y=remoteCursor.row*TH;
+  c.save();
+  c.globalAlpha=fade*(0.6+0.4*Math.sin(Date.now()*.008));
+  c.strokeStyle=pc.light;c.lineWidth=4;
+  c.strokeRect(x-2,y-2,TW+4,TH+4);
+  c.lineWidth=2;c.strokeStyle='#fff';c.strokeRect(x,y,TW,TH);
+  // ラベル
+  c.globalAlpha=fade;
+  c.fillStyle='rgba(0,0,0,.7)';c.fillRect(x,y-14,Math.max(60,TW),12);
+  c.fillStyle=pc.light;c.font='bold 9px sans-serif';c.textAlign='left';c.textBaseline='middle';
+  var name=(GS&&GS.players[remoteCursor.seat]&&GS.players[remoteCursor.seat].name)||('P'+(remoteCursor.seat+1));
+  c.fillText('▶ '+name,x+2,y-8);
+  c.restore();
+}
+
 /* ===== レベルアップフラッシュ ===== */
 var lvUpQueue=[];
 function lvUpFlash(u,gained){
@@ -196,7 +229,7 @@ function initMap(){
   minimapCanvas=document.getElementById('minimap');minimapCtx=minimapCanvas.getContext('2d');
   animTimer=setInterval(function(){animFrame=(animFrame+1)%60;if(GS)render();},150);
 }
-function render(){if(!mapCtx)return;drawMap();drawMinimap();}
+function render(){if(!mapCtx)return;drawMap();drawRemoteCursor(mapCtx);drawMinimap();}
 function drawMap(){
   var c=mapCtx,t=animFrame;
   // 地形
@@ -274,17 +307,40 @@ function drawUnit(c,u,t){
   var x=u.col*TW,y=u.row*TH,pc=PCOLS[u.owner];
   var isDone=u.moved&&u.attacked,isSel=selUnit&&selUnit.id===u.id;
   var ux=x+TW/2,uy=y+TH/2,r2=TW*.38;
+  // ★自軍/敵軍 判定（オフラインは現ターン主、オンラインは myPeerIdx 基準）
+  var meIdx=(typeof onlineMode!=='undefined'&&onlineMode)?myPeerIdx:GS.turn;
+  var isOwn=(u.owner===meIdx);
+  var isMovable=isOwn&&!isDone&&isMyTurn;  // 自分の動かせるユニット
   // レベルに応じてサイズ微増
   var scale=Math.min(1.0+((u.level||1)-1)*.015,1.25);
+  // ★自軍ユニット: 外側に光彩リング（一目で「自分」と分かる）
+  if(isOwn&&!isDone){
+    var glowR=r2*scale+5+Math.sin(t*.18)*1.5;
+    var glow=c.createRadialGradient(ux,uy,r2*scale,ux,uy,glowR+4);
+    glow.addColorStop(0,pc.light+'cc');glow.addColorStop(1,pc.light+'00');
+    c.fillStyle=glow;c.beginPath();c.arc(ux,uy,glowR+4,0,Math.PI*2);c.fill();
+  }
+  // ★動かせるユニット: 緑の点滅リング
+  if(isMovable){
+    var pulse=0.6+0.4*Math.sin(t*.18);
+    c.strokeStyle='rgba(120,255,120,'+pulse+')';c.lineWidth=2.5;
+    c.beginPath();c.arc(ux,uy,r2*scale+3,0,Math.PI*2);c.stroke();
+  }
   // 円背景
   var ug=c.createRadialGradient(ux,uy,2,ux,uy,r2*scale);
   ug.addColorStop(0,isDone?'rgba(40,40,40,.85)':pc.main+'dd');ug.addColorStop(1,isDone?'rgba(20,20,20,.7)':pc.dark+'aa');
   c.fillStyle=ug;c.beginPath();c.arc(ux,uy,r2*scale,0,Math.PI*2);c.fill();
-  // 枠
-  c.strokeStyle=isSel?'#ffee44':(u.type==='king'?'#f0c840':isDone?'#333':pc.light);
-  c.lineWidth=isSel?2.5:u.type==='king'?2:1.5;c.beginPath();c.arc(ux,uy,r2*scale,0,Math.PI*2);c.stroke();
+  // 枠：自軍は太い金/明るい縁、敵は細く赤系
+  var frameCol=isSel?'#ffee44':(u.type==='king'?'#f0c840':isDone?'#333':(isOwn?pc.light:'#ff5555'));
+  var frameWid=isSel?3:(isOwn?2.5:1.5);
+  c.strokeStyle=frameCol;c.lineWidth=frameWid;c.beginPath();c.arc(ux,uy,r2*scale,0,Math.PI*2);c.stroke();
+  // 敵ユニット: 外側に赤い破線（明確に区別）
+  if(!isOwn&&!isDone){
+    c.strokeStyle='rgba(255,80,80,.8)';c.lineWidth=1.2;c.setLineDash([3,2]);
+    c.beginPath();c.arc(ux,uy,r2*scale+2.5,0,Math.PI*2);c.stroke();c.setLineDash([]);
+  }
   // 王様はダブル枠
-  if(u.type==='king'){c.strokeStyle=pc.light+'80';c.lineWidth=1;c.beginPath();c.arc(ux,uy,r2*scale+3,0,Math.PI*2);c.stroke();}
+  if(u.type==='king'){c.strokeStyle=pc.light+'a0';c.lineWidth=1.2;c.beginPath();c.arc(ux,uy,r2*scale+3,0,Math.PI*2);c.stroke();}
   // ユニット記号
   var sym=UDEFS[u.type]?UDEFS[u.type].sym:'?';
   c.fillStyle=isDone?'#555':pc.light;
@@ -306,9 +362,16 @@ function drawUnit(c,u,t){
   // 状態アイコン
   if(u.status&&u.status.length){var sic={'cursed':'💀','poisoned':'🟢','weakened':'⬇','enfeebled':'🔻'};u.status.forEach(function(s,si){c.font='8px sans-serif';c.textAlign='left';c.fillText(sic[s]||'?',x+2+si*10,y+TH-16);});}
   // 選択パルス
-  if(isSel&&!isDone){var pulse=Math.sin(t*.25)*.3;c.strokeStyle='rgba(255,220,80,'+(0.5+pulse)+')';c.lineWidth=1.5;c.setLineDash([3,3]);c.strokeRect(x+2,y+2,TW-4,TH-4);c.setLineDash([]);}
+  if(isSel&&!isDone){var pulse2=Math.sin(t*.25)*.3;c.strokeStyle='rgba(255,220,80,'+(0.5+pulse2)+')';c.lineWidth=1.5;c.setLineDash([3,3]);c.strokeRect(x+2,y+2,TW-4,TH-4);c.setLineDash([]);}
   // 行動済みオーバーレイ
-  if(isDone){c.fillStyle='rgba(0,0,0,.35)';c.beginPath();c.arc(ux,uy,r2*scale,0,Math.PI*2);c.fill();}
+  if(isDone){
+    c.fillStyle='rgba(0,0,0,.45)';c.beginPath();c.arc(ux,uy,r2*scale,0,Math.PI*2);c.fill();
+    // ★行動済みマーク（チェックマーク）
+    if(isOwn){
+      c.fillStyle='rgba(120,120,120,.8)';c.font='bold '+Math.floor(TW*.18)+'px sans-serif';
+      c.textAlign='right';c.textBaseline='top';c.fillText('✓',x+TW-2,y+2);
+    }
+  }
 }
 function drawMinimap(){
   if(!minimapCtx||!GS)return;

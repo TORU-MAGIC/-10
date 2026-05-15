@@ -13,6 +13,21 @@ var onlineMode=false,isHost=false,myPeerIdx=0,myPeer=null,onlineConns=[],hostNp=
 var pendingActions={};  // {seq:{msg,t}} v10.0: ACK待ち未確認アクション
 var ackedSeq=-1;        // v10.0: 最後にACKされたシーケンス番号
 var ackResendTimer=null;// v10.0: 5秒未ACKで再送するタイマー
+
+/* ===== プレイヤー名管理 ===== */
+var myPlayerName='';
+function loadPlayerName(){try{myPlayerName=localStorage.getItem('kok_pname')||'';}catch(e){myPlayerName='';}return myPlayerName;}
+function savePlayerName(){var el=document.getElementById('playerNameInp');if(!el)return;myPlayerName=(el.value||'').trim().slice(0,10);try{localStorage.setItem('kok_pname',myPlayerName);}catch(e){}var el2=document.getElementById('playerNameInp2');if(el2)el2.value=myPlayerName;}
+function savePlayerName2(){var el=document.getElementById('playerNameInp2');if(!el)return;myPlayerName=(el.value||'').trim().slice(0,10);try{localStorage.setItem('kok_pname',myPlayerName);}catch(e){}var el1=document.getElementById('playerNameInp');if(el1)el1.value=myPlayerName;}
+function fillPlayerNameInputs(){loadPlayerName();var el=document.getElementById('playerNameInp');if(el)el.value=myPlayerName;var el2=document.getElementById('playerNameInp2');if(el2)el2.value=myPlayerName;}
+
+/* ===== カーソル追従（操作中ユニットを他クライアントへ通知） ===== */
+function broadcastCursor(r,c){
+  if(!onlineMode||!GS)return;
+  var msg={type:'cursor',row:r,col:c,seat:isHost?0:myPeerIdx,t:Date.now()};
+  if(isHost){onlineConns.forEach(function(conn){try{conn.conn.send(msg);}catch(e){}});}
+  else if(onlineConns[0]){try{onlineConns[0].conn.send(msg);}catch(e){}}
+}
 function startAckResendLoop(){
   if(ackResendTimer)return;
   ackResendTimer=setInterval(function(){
@@ -42,6 +57,7 @@ function hashGS(gs){
 
 function createOnlineRoom(){
   if(typeof Peer==='undefined'){alert('PeerJSが読み込めません');return;}
+  loadPlayerName(); // ★名前を読込
   var code=String(Math.floor(100+Math.random()*900));hostCode=code;
   var peerId='kok9v'+code;
   try{myPeer=new Peer(peerId);}catch(e){document.getElementById('onlineStatus').textContent='エラー: '+e.message;return;}
@@ -83,8 +99,13 @@ function createOnlineRoom(){
   });
 }
 function updateHostList(){
-  var html='<div style="color:var(--gold);margin-bottom:4px">参加者:</div><div>👤 あなた (P1・ホスト)</div>';
-  onlineConns.forEach(function(c){html+='<div>👤 P'+(c.seat+1)+'</div>';});
+  loadPlayerName();
+  var meName=myPlayerName||'あなた';
+  var html='<div style="color:var(--gold);margin-bottom:4px">参加者:</div><div>👤 '+meName+' (P1・ホスト)</div>';
+  onlineConns.forEach(function(c){
+    var nm=c.playerName||('P'+(c.seat+1));
+    html+='<div>👤 '+nm+' (P'+(c.seat+1)+')</div>';
+  });
   for(var i=onlineConns.length+1;i<hostNp;i++)html+='<div style="color:var(--dim)">🤖 CPU（空き待ち）</div>';
   document.getElementById('hostPlayerList').innerHTML=html;
 }
@@ -94,8 +115,13 @@ function startOnlineGame(){
   onlineConns.sort(function(a,b){return a.seat-b.seat;});
   onlineConns.forEach(function(c,i){c.seat=i+1;});
 
-  var settings=[{name:'あなた(P1)',type:'human'}];
-  onlineConns.forEach(function(c){settings.push({name:'P'+(c.seat+1),type:'human'});});
+  loadPlayerName();
+  var hostName=myPlayerName||'P1';
+  var settings=[{name:hostName,type:'human'}];
+  onlineConns.forEach(function(c){
+    var nm=(c.playerName||'').trim()||('P'+(c.seat+1));
+    settings.push({name:nm,type:'human'});
+  });
   var aiTypes=['aggressive','cautious','genius'];
   while(settings.length<hostNp)settings.push({name:PCOLS[settings.length].name+'CPU',type:aiTypes[Math.floor(Math.random()*aiTypes.length)]});
   GS=newGS(hostNp,settings);useWeather=true;useEvent=true;
@@ -106,7 +132,7 @@ function startOnlineGame(){
   });
   hideAllBoxes();startGame();startAckResendLoop();
 }
-function showJoinRoom(){hideAllBoxes();document.getElementById('joinBox').style.display='flex';document.getElementById('joinCodeInp').value='';document.getElementById('joinStatus').textContent='';}
+function showJoinRoom(){hideAllBoxes();document.getElementById('joinBox').style.display='flex';document.getElementById('joinCodeInp').value='';document.getElementById('joinStatus').textContent='';fillPlayerNameInputs();}
 function joinOnlineRoom(){
   var code=document.getElementById('joinCodeInp').value.trim();
   if(code.length!==3){document.getElementById('joinStatus').textContent='3桁のコードを入力';return;}
@@ -117,10 +143,15 @@ function joinOnlineRoom(){
   //   broadcastAction の冒頭 if(!onlineMode)return; で全送信が抑止され、
   //   P2 の操作がホストに届かない＆クライアントが勝手にローカル advanceTurn する。
   onlineMode=true;isHost=false;
+  loadPlayerName();
   myPeer.on('open',function(){
     var conn=myPeer.connect('kok9v'+code,{reliable:true,serialization:'json'});
     onlineConns=[{conn:conn,seat:0}];
-    conn.on('open',function(){document.getElementById('joinStatus').textContent='接続完了！ホスト待機中...';conn.send({type:'join'});});
+    conn.on('open',function(){
+      document.getElementById('joinStatus').textContent='接続完了！ホスト待機中...';
+      // ★名前同梱
+      conn.send({type:'join',playerName:myPlayerName||''});
+    });
     conn.on('data',function(data){handleClientMsg(data);});
     conn.on('error',function(e){document.getElementById('joinStatus').textContent='接続失敗: '+e;});
     myPeer.on('error',function(e){document.getElementById('joinStatus').textContent='エラー: '+e.message;});
@@ -140,7 +171,7 @@ function joinOnlineRoom(){
 }
 // ★リアルタイム: ホストがクライアントメッセージを受信
 function handleHostMsg(conn,data,seat){
-  if(!GS&&data.type!=='join')return;
+  if(!GS&&data.type!=='join'&&data.type!=='version_check')return;
   // v10.0: ACKは即時処理（ゲーム未開始でも来る可能性は低いがガード）
   if(data.type==='ack'){if(data.seq!=null&&pendingActions[data.seq])delete pendingActions[data.seq];return;}
   if(data.type==='version_check'){
@@ -148,8 +179,22 @@ function handleHostMsg(conn,data,seat){
     else conn.send({type:'version_ok'});
     return;
   }
+  // ★参加時の名前を保存
+  if(data.type==='join'){
+    var co=onlineConns.find(function(c){return c.conn===conn;});
+    if(co){co.playerName=(data.playerName||'').trim().slice(0,10);}
+    updateHostList();
+    return;
+  }
   if(data.type==='request_state'){
     conn.send({type:'state',gs:serGS(),hash:hashGS(GS)});
+    return;
+  }
+  // ★カーソル位置: 全クライアントへブロードキャスト（送信者除く）
+  if(data.type==='cursor'){
+    onlineConns.forEach(function(c){if(c.conn!==conn){try{c.conn.send(data);}catch(e){}}});
+    // ホスト自身も追従描画
+    if(typeof handleRemoteCursor==='function')handleRemoteCursor(data);
     return;
   }
   if(data.type==='action'){
@@ -208,6 +253,10 @@ function handleClientMsg(data){
     applyRemoteAction(data.action);render();updUI();
     if(data.seq!=null&&onlineConns[0]){try{onlineConns[0].conn.send({type:'ack',seq:data.seq,hash:hashGS(GS)});}catch(e){}}
   }
+  else if(data.type==='cursor'){
+    // ★他プレイヤーのカーソル位置を受信して画面追従
+    if(typeof handleRemoteCursor==='function')handleRemoteCursor(data);
+  }
   else if(data.type==='ack'){
     if(data.seq!=null&&pendingActions[data.seq])delete pendingActions[data.seq];
     // ハッシュ不一致時は state 要求
@@ -231,13 +280,15 @@ function applyRemoteAction(action){
       if(u){doMove(GS,u.id,action.r,action.c);render();updUI();}
     }
     else if(action.type==='attack'){
-      // v10.0: 関与プレイヤーは戦闘画面を再生（ホスト・クライアント問わず）
+      // v10.0+: 観戦モード — 人間 vs 人間 の戦闘は全員が観戦できる
       var atkU=GS.units.find(function(u){return u.id===action.atkId;});
       var defU=GS.units.find(function(u){return u.id===action.defId;});
       var iAmInv=atkU&&defU&&(atkU.owner===myPeerIdx||defU.owner===myPeerIdx);
+      var humanInvolved=atkU&&defU&&(isHuman(atkU.owner)||isHuman(defU.owner));
       var res=calcAttack(GS,action.atkId,action.defId);
-      // ★FIX: !isHost の制限を削除 → ホストもクライアント発の戦闘を表示
-      if(res&&iAmInv){showBattle(res,function(){render();updUI();if(GS.over)showGameOver();});}
+      // ★スペクテーター: 関与してなくても、人間が絡む戦闘なら見せる（dual ビュー時）
+      var shouldShow=res&&(iAmInv||(humanInvolved&&battleViewMode!=='self'&&battleSpeedMode!=='skip'));
+      if(shouldShow){showBattle(res,function(){render();updUI();if(GS.over)showGameOver();});}
       else{render();updUI();if(GS&&GS.over)showGameOver();}
     }
     else if(action.type==='field_magic'){doFieldMagicAction(GS,action.uid);render();updUI();}

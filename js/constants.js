@@ -124,8 +124,8 @@ var MAP=[
   [0,1,0,0,4,0,0,0,0,7,7,0,0,7,7,0,0,0,0,4,0,0,1,0],
   [5,0,1,1,0,0,2,2,4,0,0,4,4,0,0,4,2,2,0,0,1,1,0,5],
 ];
-var CASTLE_POS=[[0,0],[0,23],[17,0],[17,23],[9,0],[9,23]];
-var INIT_UNITS=[[[1,0],[0,1]],[[1,23],[0,22]],[[16,0],[17,1]],[[16,23],[17,22]],[[8,0],[10,0]],[[8,23],[10,23]]];
+var CASTLE_POS=[[0,0],[0,23],[17,0],[17,23],[9,0],[9,23],[0,11],[17,12]];
+var INIT_UNITS=[[[1,0],[0,1]],[[1,23],[0,22]],[[16,0],[17,1]],[[16,23],[17,22]],[[8,0],[10,0]],[[8,23],[10,23]],[[1,11],[0,10]],[[16,12],[17,13]]];
 // ===== ユニット定義 (物理/魔法・属性付き) =====
 var UDEFS_BASE={
   soldier:    {name:'兵士',      sym:'⚔', hp:22,atk:7, pdef:3, mdef:2, atkType:'physical',elem:'none',    mov:3,rng:1,cost:100, desc:'コスパ最強・汎用歩兵'},
@@ -191,6 +191,8 @@ var PCOLS=[
   {main:'#b7770d',light:'#f0c040',dark:'#7a4d08',name:'黄王国'},
   {main:'#8e44ad',light:'#c77dff',dark:'#5b2c6f',name:'紫王国'},
   {main:'#117a8b',light:'#40e0d0',dark:'#0a4a55',name:'青緑王国'},
+  {main:'#e67e22',light:'#ffb066',dark:'#a04a08',name:'橙王国'},
+  {main:'#d63384',light:'#ff80c0',dark:'#8b1f5a',name:'桃王国'},
 ];
 var AI_TYPES=['aggressive','cautious','genius','aggressive'];
 var WEATHERS=[{name:'晴天',icon:'☀',atk:0,mov:0,inc:0,def:0},{name:'大雨',icon:'🌧',atk:-1,mov:-1,inc:0,def:0},{name:'濃霧',icon:'🌫',atk:-2,mov:0,inc:0,def:1},{name:'嵐',icon:'⛈',atk:-2,mov:-2,inc:-20,def:0},{name:'好天',icon:'🌟',atk:2,mov:1,inc:10,def:0},{name:'地震',icon:'🌋',atk:-1,mov:-2,inc:-10,def:2},{name:'聖域',icon:'🏛',atk:0,mov:0,inc:5,def:0,sanctuary:true}];

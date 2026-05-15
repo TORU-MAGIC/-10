@@ -34,7 +34,7 @@ function saveCustom(){
 /* ===== タイトル ===== */
 function hideAllBoxes(){['modeBox','offlineBox','onlineBox','hostBox','joinBox','customBox'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='none';});}
 function showOfflineSetup(){hideAllBoxes();document.getElementById('offlineBox').style.display='flex';buildPSetup(4);}
-function showOnlineMenu(){hideAllBoxes();document.getElementById('onlineBox').style.display='flex';}
+function showOnlineMenu(){hideAllBoxes();document.getElementById('onlineBox').style.display='flex';if(typeof fillPlayerNameInputs==='function')fillPlayerNameInputs();}
 var _pcSel=4;
 function setPC(btn,n){_pcSel=n;document.querySelectorAll('#offlineBox .pcb').forEach(function(b){b.classList.toggle('sel',b===btn);});buildPSetup(n);}
 function buildPSetup(n){
@@ -286,8 +286,7 @@ function makeRng(seed){
 
 /* --- マップレイアウト計算 --- */
 function computeMapLayout(rows,cols){
-  // 6プレイヤー分の城砦位置（マップサイズに応じた相対座標）
-  // 各プレイヤーの城砦位置を角・辺に配置
+  // 8プレイヤー分の城砦位置（マップサイズに応じた相対座標）
   CASTLE_POS=[
     [0,           0          ],  // P1: 左上
     [0,           cols-1     ],  // P2: 右上
@@ -295,6 +294,8 @@ function computeMapLayout(rows,cols){
     [rows-1,      cols-1     ],  // P4: 右下
     [Math.floor(rows/2), 0   ],  // P5: 左中
     [Math.floor(rows/2), cols-1], // P6: 右中
+    [0,           Math.floor(cols/2)],   // P7: 上中
+    [rows-1,      Math.floor(cols/2)],   // P8: 下中
   ];
   // 初期ユニット配置（城砦の隣接セル）
   INIT_UNITS=CASTLE_POS.map(function(cp){

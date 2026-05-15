@@ -28,13 +28,15 @@
   <button class="btn btn-purple" onclick="showCustomize()">⚙ ユニットカスタマイズ</button>
 </div>
 <div class="mbox" id="offlineBox" style="display:none">
-  <div class="slabel">プレイ人数 (2〜6人)</div>
-  <div class="prow" style="justify-content:center">
+  <div class="slabel">プレイ人数 (2〜8人)</div>
+  <div class="prow" style="justify-content:center;flex-wrap:wrap">
     <button class="pcb" id="pcb2" onclick="setPC(this,2)">2</button>
     <button class="pcb" id="pcb3" onclick="setPC(this,3)">3</button>
     <button class="pcb sel" id="pcb4" onclick="setPC(this,4)">4</button>
     <button class="pcb" id="pcb5" onclick="setPC(this,5)">5</button>
     <button class="pcb" id="pcb6" onclick="setPC(this,6)">6</button>
+    <button class="pcb" id="pcb7" onclick="setPC(this,7)">7</button>
+    <button class="pcb" id="pcb8" onclick="setPC(this,8)">8</button>
   </div>
   <div class="slabel">マップサイズ &amp; 生成方法</div>
   <div style="display:flex;gap:5px;margin-bottom:5px">
@@ -74,6 +76,10 @@
 </div>
 <div class="mbox" id="onlineBox" style="display:none">
   <div class="slabel">オンライン対戦（PeerJS）</div>
+  <div style="background:rgba(6,14,28,.8);border:1px solid rgba(52,100,160,.3);border-radius:6px;padding:8px">
+    <div style="font-size:9px;color:var(--dim);margin-bottom:3px">あなたの名前 (最大10文字)</div>
+    <input class="inp" id="playerNameInp" maxlength="10" placeholder="プレイヤー名" oninput="savePlayerName()" style="text-align:center">
+  </div>
   <button class="btn btn-gold" onclick="createOnlineRoom()">🏠 ルームを作成</button>
   <button class="btn btn-blue" onclick="showJoinRoom()">🚪 ルームに参加</button>
   <button class="btn" onclick="hideAllBoxes();document.getElementById('modeBox').style.display='flex'">← 戻る</button>
@@ -84,18 +90,24 @@
   <div class="code-d" id="hostCodeDisplay">---</div>
   <div class="note">このコードを参加者に共有してください</div>
   <div style="background:rgba(4,8,16,.8);border:1px solid rgba(52,100,160,.3);border-radius:6px;padding:8px;min-height:60px;font-size:11px" id="hostPlayerList">待機中...</div>
-  <div class="slabel">最大人数</div>
-  <div class="prow" style="justify-content:center">
+  <div class="slabel">最大人数 (2〜8人)</div>
+  <div class="prow" style="justify-content:center;flex-wrap:wrap">
     <button class="pcb" id="hpcb2" onclick="setHostPC(this,2)">2</button>
     <button class="pcb" id="hpcb3" onclick="setHostPC(this,3)">3</button>
     <button class="pcb sel" id="hpcb4" onclick="setHostPC(this,4)">4</button>
     <button class="pcb" id="hpcb5" onclick="setHostPC(this,5)">5</button>
     <button class="pcb" id="hpcb6" onclick="setHostPC(this,6)">6</button>
+    <button class="pcb" id="hpcb7" onclick="setHostPC(this,7)">7</button>
+    <button class="pcb" id="hpcb8" onclick="setHostPC(this,8)">8</button>
   </div>
   <button class="btn btn-gold" onclick="startOnlineGame()">▶ ゲーム開始</button>
   <button class="btn btn-red" onclick="closeOnlineRoom()">✕ キャンセル</button>
 </div>
 <div class="mbox" id="joinBox" style="display:none">
+  <div style="background:rgba(6,14,28,.8);border:1px solid rgba(52,100,160,.3);border-radius:6px;padding:8px">
+    <div style="font-size:9px;color:var(--dim);margin-bottom:3px">あなたの名前</div>
+    <input class="inp" id="playerNameInp2" maxlength="10" placeholder="プレイヤー名" oninput="savePlayerName2()" style="text-align:center">
+  </div>
   <div class="slabel">ルームコードを入力</div>
   <input class="code-i" id="joinCodeInp" maxlength="3" placeholder="000" oninput="this.value=this.value.replace(/\D/g,'')">
   <button class="btn btn-gold" onclick="joinOnlineRoom()">接続</button>

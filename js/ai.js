@@ -81,7 +81,7 @@ function cpuActOne(pid,u,cb){
   if(!u.attacked){var tgts=getAttackable(GS,u);if(tgts.length>0){var best=cpuBestTarget(tgts,at,u);if(best){var d=uAt(GS,best.r,best.c);if(d){cpuExecAtk(u,d,function(){u.moved=true;u.attacked=true;cb();});return;}}}}
   if(!u.moved){
     var movs=getMovable(GS,u),dest=cpuBestDest(movs,pid,at,u);
-    if(dest){var res=doMove(GS,u.id,dest.r,dest.c);if(res.captured){addLog(GS.players[pid].name+'の'+UDEFS[u.type].name+'が'+res.terrain.name+'を占領！',{cpu:true});SFX.capture();}if(onlineMode&&isHost)broadcastAction({type:'move',uid:u.id,r:dest.r,c:dest.c});focusOnUnit(u,true);render();updUI();}
+    if(dest){var res=doMove(GS,u.id,dest.r,dest.c);if(res.captured){addLog(GS.players[pid].name+'の'+UDEFS[u.type].name+'が'+res.terrain.name+'を占領！',{cpu:true});SFX.capture();}if(onlineMode&&isHost){broadcastAction({type:'move',uid:u.id,r:dest.r,c:dest.c});if(typeof broadcastCursor==='function')broadcastCursor(dest.r,dest.c);}focusOnUnit(u,true);render();updUI();}
     if(!u.attacked){var tgts2=getAttackable(GS,u);if(tgts2.length>0){var best2=cpuBestTarget(tgts2,at,u);if(best2){var d2=uAt(GS,best2.r,best2.c);if(d2){cpuExecAtk(u,d2,function(){u.moved=true;u.attacked=true;cb();});return;}}}}
   }
   u.moved=true;u.attacked=true;cb();
@@ -92,7 +92,7 @@ function cpuExecAtk(atk,def,cb){
   var m=GS.players[atk.owner].name+'の'+UDEFS[atk.type].name+'[Lv'+atk.level+']→'+UDEFS[def.type].name+'[Lv'+(def.level||1)+'](-'+res.dmg+')';
   if(res.isCrit)m+='💥会心';if(res.dkill)m+='【撃破】';if(res.cdmg)m+=' 反撃-'+res.cdmg+(res.ckill?'【撃破】':'');
   addLog(m,{hot:true});
-  if(onlineMode&&isHost)broadcastAction({type:'attack',atkId:atk.id,defId:def.id});
+  if(onlineMode&&isHost){broadcastAction({type:'attack',atkId:atk.id,defId:def.id});if(typeof broadcastCursor==='function')broadcastCursor(def.row,def.col);}
   // CPU対CPU: バトル画面スキップ、人間のターン or 自分が関与する場合のみ表示
   var humanIsAtk=isHuman(atk.owner),humanIsDef=isHuman(def.owner);
   var iAmInvolved=onlineMode&&(atk.owner===myPeerIdx||def.owner===myPeerIdx);

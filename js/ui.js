@@ -68,7 +68,10 @@ function onTapPos(row,col,cx,cy){
   if(onlineMode&&GS.turn!==myPeerIdx){if(tapped)showHpTip(tapped,cx,cy);return;}
   if(tapped&&tapped.owner===GS.turn){
     if(selUnit&&selUnit.id===tapped.id){cancelSel();return;}
-    selUnit=tapped;moveCells=tapped.moved?[]:getMovable(GS,tapped);atkCells=tapped.attacked?[]:getAttackable(GS,tapped);aoeCells=[];gMode='sel';SFX.select();render();updUI();showHpTip(tapped,cx,cy);return;
+    selUnit=tapped;moveCells=tapped.moved?[]:getMovable(GS,tapped);atkCells=tapped.attacked?[]:getAttackable(GS,tapped);aoeCells=[];gMode='sel';SFX.select();
+    // ★オンライン: 自分が選択したユニットの位置を他プレイヤーへ通知（追従用）
+    if(onlineMode&&typeof broadcastCursor==='function')broadcastCursor(tapped.row,tapped.col);
+    render();updUI();showHpTip(tapped,cx,cy);return;
   }
   if(selUnit&&selUnit.owner===GS.turn){
     if(tapped&&tapped.owner!==GS.turn&&atkCells.some(function(a){return a.r===row&&a.c===col;})){SFX.select();execAtk(selUnit,tapped);return;}
@@ -86,7 +89,10 @@ function execMove(u,r,c){
   moveCells=[];
   if(res.captured){addLog(GS.players[GS.turn].name+'の'+UDEFS[u.type].name+'が'+res.terrain.name+'を占領！',{hot:true});SFX.capture();}
   if(!u.attacked)atkCells=getAttackable(GS,u);
-  if(onlineMode)broadcastAction({type:'move',uid:u.id,r:r,c:c});
+  if(onlineMode){
+    broadcastAction({type:'move',uid:u.id,r:r,c:c});
+    if(typeof broadcastCursor==='function')broadcastCursor(r,c);
+  }
   render();updUI();if(GS.over)showGameOver();
 }
 function execAtk(atk,def){
@@ -96,7 +102,10 @@ function execAtk(atk,def){
   var m=GS.players[atk.owner].name+'の'+UDEFS[atk.type].name+'[Lv'+(atk.level||1)+']→'+UDEFS[def.type].name+'[Lv'+(def.level||1)+'](-'+res.dmg+')';
   if(res.isCrit)m+='💥会心';if(res.elemMult>=1.4)m+='⚡属性有効';if(res.dkill)m+='【撃破】';if(res.cdmg)m+=' 反撃-'+res.cdmg+(res.ckill?'【撃破】':'');
   addLog(m,{hot:true});gMode='';atkCells=[];moveCells=[];
-  if(onlineMode)broadcastAction({type:'attack',atkId:atk.id,defId:def.id});
+  if(onlineMode){
+    broadcastAction({type:'attack',atkId:atk.id,defId:def.id});
+    if(typeof broadcastCursor==='function')broadcastCursor(def.row,def.col);
+  }
   showBattle(res,function(){selUnit=null;render();updUI();if(GS.over)showGameOver();});
 }
 function execKingAoe(){
