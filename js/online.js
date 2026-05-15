@@ -63,7 +63,22 @@ function createOnlineRoom(){
     var seat=onlineConns.length+1;onlineConns.push({conn:conn,seat:seat});
     conn.on('open',function(){conn.send({type:'assign',seat:seat});updateHostList();});
     conn.on('data',function(data){handleHostMsg(conn,data,seat);});
-    conn.on('close',function(){onlineConns=onlineConns.filter(function(c){return c.conn!==conn;});updateHostList();});
+    conn.on('close',function(){
+      onlineConns=onlineConns.filter(function(c){return c.conn!==conn;});
+      updateHostList();
+      // ★FIX: 切断プレイヤーをCPU(慎重型)代行に切替（ゲーム停止防止）
+      if(GS&&GS.players[seat]&&GS.players[seat].aiType==='human'){
+        GS.players[seat].aiType='cautious';
+        GS.players[seat].disconnected=true;
+        addLog('P'+(seat+1)+' 切断 → CPU(慎重型)が代行',{sys:true});
+        showMsg('⚠ P'+(seat+1)+' が切断されました（CPU代行）',2500);
+        broadcastState();
+        // 切断プレイヤーのターン中なら CPU で進行
+        if(GS.turn===seat&&!isPaused&&!GS.over){
+          setTimeout(function(){runCPUTurn(GS.turn);},600);
+        }
+      }
+    });
     updateHostList();
   });
 }
@@ -75,14 +90,20 @@ function updateHostList(){
 }
 function setHostPC(btn,n){hostNp=n;document.querySelectorAll('#hostBox .pcb').forEach(function(b){b.classList.toggle('sel',b===btn);});updateHostList();}
 function startOnlineGame(){
+  // ★FIX: シート順を正規化（接続順に1,2,3...と割り直し）
+  onlineConns.sort(function(a,b){return a.seat-b.seat;});
+  onlineConns.forEach(function(c,i){c.seat=i+1;});
+
   var settings=[{name:'あなた(P1)',type:'human'}];
-  onlineConns.forEach(function(c,i){settings.push({name:'P'+(i+2),type:'human'});});
+  onlineConns.forEach(function(c){settings.push({name:'P'+(c.seat+1),type:'human'});});
   var aiTypes=['aggressive','cautious','genius'];
   while(settings.length<hostNp)settings.push({name:PCOLS[settings.length].name+'CPU',type:aiTypes[Math.floor(Math.random()*aiTypes.length)]});
   GS=newGS(hostNp,settings);useWeather=true;useEvent=true;
   var gs=serGS();
-  // v10.0: rngSeed と version を含めて全クライアントへ配布
-  onlineConns.forEach(function(c,i){c.conn.send({type:'start',gs:gs,seat:i+1,np:hostNp,settings:settings,serverVersion:KOK_VERSION});});
+  // ★FIX: シート番号を c.seat から取得（disconnect/reconnect の整合性）
+  onlineConns.forEach(function(c){
+    try{c.conn.send({type:'start',gs:gs,seat:c.seat,np:hostNp,settings:settings,serverVersion:KOK_VERSION});}catch(e){}
+  });
   hideAllBoxes();startGame();startAckResendLoop();
 }
 function showJoinRoom(){hideAllBoxes();document.getElementById('joinBox').style.display='flex';document.getElementById('joinCodeInp').value='';document.getElementById('joinStatus').textContent='';}
@@ -92,6 +113,10 @@ function joinOnlineRoom(){
   if(typeof Peer==='undefined'){document.getElementById('joinStatus').textContent='PeerJSが利用不可';return;}
   document.getElementById('joinStatus').textContent='接続中...';
   try{myPeer=new Peer();}catch(e){document.getElementById('joinStatus').textContent='エラー: '+e.message;return;}
+  // ★FIX(致命的): クライアント側でも onlineMode=true を設定。これが無いと
+  //   broadcastAction の冒頭 if(!onlineMode)return; で全送信が抑止され、
+  //   P2 の操作がホストに届かない＆クライアントが勝手にローカル advanceTurn する。
+  onlineMode=true;isHost=false;
   myPeer.on('open',function(){
     var conn=myPeer.connect('kok9v'+code,{reliable:true,serialization:'json'});
     onlineConns=[{conn:conn,seat:0}];
@@ -130,17 +155,31 @@ function handleHostMsg(conn,data,seat){
   if(data.type==='action'){
     if(!GS)return;
     var act=data.action;
-    // v10.0: ターンロック（end_turn と pause 以外は本人ターン中のみ受理）
-    if(act.type!=='end_turn'&&act.type!=='pause'&&GS.turn!==seat){
+    // v10.0: ターンロック（end_turn と pause 以外は本人のシート中のみ受理）
+    // ★FIX: end_turn も「自分のターン中の自分」しか受け付けない（他人がターンを進められないように）
+    if(act.type!=='pause'&&GS.turn!==seat){
       conn.send({type:'reject',seq:data.seq,reason:'not_your_turn'});
       conn.send({type:'state',gs:serGS(),hash:hashGS(GS)});
       return;
+    }
+    // ★FIX: 攻撃・移動・特殊アクション系は、対象ユニット所有者がシートと一致しているか検証
+    if(act.type==='move'||act.type==='wait'||act.type==='field_magic'||act.type==='king_aoe'||act.type==='necro_summon'){
+      var u0=GS.units.find(function(u){return u.id===act.uid;});
+      if(!u0||u0.owner!==seat){conn.send({type:'reject',seq:data.seq,reason:'not_your_unit'});conn.send({type:'state',gs:serGS(),hash:hashGS(GS)});return;}
+    }
+    if(act.type==='attack'){
+      var au=GS.units.find(function(u){return u.id===act.atkId;});
+      if(!au||au.owner!==seat){conn.send({type:'reject',seq:data.seq,reason:'not_your_unit'});conn.send({type:'state',gs:serGS(),hash:hashGS(GS)});return;}
+    }
+    if(act.type==='produce'){
+      // 生産: 占領タイルが本人所有か検証
+      if(GS.own[act.r]==null||GS.own[act.r][act.c]!==seat){conn.send({type:'reject',seq:data.seq,reason:'not_your_tile'});conn.send({type:'state',gs:serGS(),hash:hashGS(GS)});return;}
     }
     applyRemoteAction(act);
     // ACK返送 + 同アクションを他クライアントへ転送
     conn.send({type:'ack',seq:data.seq,hash:hashGS(GS)});
     onlineConns.forEach(function(c){if(c.conn!==conn){try{c.conn.send({type:'action',action:act,seq:GS.actionSeq++});}catch(e){}}});
-    if(act.type==='end_turn')broadcastState();
+    // ★FIX: end_turn 後の state は advanceTurn 内で送信済みのため重複削除
   }
 }
 // ★リアルタイム: クライアントがホストから受信
@@ -187,28 +226,57 @@ function handleClientMsg(data){
 function applyRemoteAction(action){
   if(!GS||!action)return;
   try{
-    if(action.type==='move'){var u=GS.units.find(function(u){return u.id===action.uid;});if(u)doMove(GS,u.id,action.r,action.c);}
+    if(action.type==='move'){
+      var u=GS.units.find(function(u){return u.id===action.uid;});
+      if(u){doMove(GS,u.id,action.r,action.c);render();updUI();}
+    }
     else if(action.type==='attack'){
-      // v10.0: クライアントでも戦闘画面を再生（自分が関与する場合）
+      // v10.0: 関与プレイヤーは戦闘画面を再生（ホスト・クライアント問わず）
       var atkU=GS.units.find(function(u){return u.id===action.atkId;});
       var defU=GS.units.find(function(u){return u.id===action.defId;});
-      var iAmInvolved=atkU&&defU&&(atkU.owner===myPeerIdx||defU.owner===myPeerIdx);
+      var iAmInv=atkU&&defU&&(atkU.owner===myPeerIdx||defU.owner===myPeerIdx);
       var res=calcAttack(GS,action.atkId,action.defId);
-      if(res&&iAmInvolved&&!isHost){showBattle(res,function(){render();updUI();if(GS.over)showGameOver();});}
+      // ★FIX: !isHost の制限を削除 → ホストもクライアント発の戦闘を表示
+      if(res&&iAmInv){showBattle(res,function(){render();updUI();if(GS.over)showGameOver();});}
+      else{render();updUI();if(GS&&GS.over)showGameOver();}
     }
-    else if(action.type==='field_magic'){doFieldMagicAction(GS,action.uid);}
-    else if(action.type==='king_aoe'){doKingAoEAction(GS,action.uid);}
-    else if(action.type==='necro_summon'){doNecroSummonAction(GS,action.uid);}
-    else if(action.type==='produce'){doProd(GS,action.unitType,action.r,action.c);}
-    else if(action.type==='wait'){var u2=GS.units.find(function(u){return u.id===action.uid;});if(u2){u2.moved=true;u2.attacked=true;}}
-    else if(action.type==='end_turn'){GS.units.forEach(function(u){if(u.owner===GS.turn){u.moved=false;u.attacked=false;}});advanceTurn();}
-    else if(action.type==='pause'){isPaused=!!action.paused;var btn=document.getElementById('pauseBtn'),ov=document.getElementById('pauseOv');if(btn){btn.textContent=isPaused?'▶':'⏸';btn.classList.toggle('paused',isPaused);}if(ov)ov.classList.toggle('show',isPaused);}
-  }catch(e){console.warn('[v10] applyRemoteAction failed:',action,e);if(onlineMode&&!isHost&&onlineConns[0]){try{onlineConns[0].conn.send({type:'request_state'});}catch(e2){}}}
+    else if(action.type==='field_magic'){doFieldMagicAction(GS,action.uid);render();updUI();}
+    else if(action.type==='king_aoe'){doKingAoEAction(GS,action.uid);render();updUI();}
+    else if(action.type==='necro_summon'){doNecroSummonAction(GS,action.uid);render();updUI();}
+    else if(action.type==='produce'){doProd(GS,action.unitType,action.r,action.c);render();updUI();}
+    else if(action.type==='wait'){var u2=GS.units.find(function(u){return u.id===action.uid;});if(u2){u2.moved=true;u2.attacked=true;render();updUI();}}
+    else if(action.type==='end_turn'){
+      // ★FIX: action.owner と GS.turn が一致しない場合は既に turn 進行済み → 二重進行を防止
+      var srcOwner=action.owner!=null?action.owner:GS.turn;
+      if(GS.turn!==srcOwner){
+        console.warn('[v10] end_turn dropped: turn mismatch (action.owner='+srcOwner+', GS.turn='+GS.turn+')');
+        return;
+      }
+      GS.units.forEach(function(u){if(u.owner===srcOwner){u.moved=false;u.attacked=false;}});
+      advanceTurn();
+    }
+    else if(action.type==='pause'){
+      isPaused=!!action.paused;
+      var btn=document.getElementById('pauseBtn'),ov=document.getElementById('pauseOv');
+      if(btn){btn.textContent=isPaused?'▶':'⏸';btn.classList.toggle('paused',isPaused);}
+      if(ov)ov.classList.toggle('show',isPaused);
+    }
+  }catch(e){
+    console.warn('[v10] applyRemoteAction failed:',action,e);
+    if(onlineMode&&!isHost&&onlineConns[0]){try{onlineConns[0].conn.send({type:'request_state'});}catch(e2){}}
+  }
 }
 // アクションをブロードキャスト（リアルタイム配信） v10.0: ACK追跡付き
 function broadcastAction(action){
   if(!onlineMode)return;
   if(!GS)return;
+  // ★FIX(最終防衛): クライアント側は自分のターン中の自分のアクションのみ送信を許可。
+  //   （ホストはCPU代理で他プレイヤーのアクションも broadcast するため除外）
+  //   pause だけは例外（ターンに関係なくいつでも送信可）
+  if(!isHost && action.type !== 'pause' && GS.turn !== myPeerIdx){
+    console.warn('[online] client broadcast blocked: GS.turn='+GS.turn+' myPeerIdx='+myPeerIdx+' action='+action.type);
+    return;
+  }
   var seq=GS.actionSeq++;
   var msg={type:'action',action:action,seq:seq};
   // アクションログ（再接続時の差分送信用）

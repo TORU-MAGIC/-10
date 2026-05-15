@@ -286,12 +286,19 @@ function advanceTurn(){
   GS.units.forEach(function(u){if(u.owner===GS.turn){u.moved=false;u.attacked=false;}});
   advWeather();if(GS.round%4===0)trigEvt();
   var inc=startOfTurn(GS,GS.turn);if(inc>0)addLog(GS.players[GS.turn].name+': +'+inc+'G',{sys:true});
-  isMyTurn=isHuman(GS.turn);
+  // ★FIX: オンラインでは自分のシート（myPeerIdx）と一致した時のみ操作可。
+  //   従来 isHuman(GS.turn) は全オンラインプレイヤーが 'human' のため、
+  //   ホスト画面で他プレイヤー(P2/P3..)を操作できてしまっていた。
+  isMyTurn = onlineMode ? (GS.turn===myPeerIdx) : isHuman(GS.turn);
+  cancelSel(); // ターン切替時に選択・モードを必ず解除
   document.getElementById('pauseBtn').style.display=allCPU()?'block':'none';
   render();updUI();showTurnNotif(GS.turn);
   if(GS.over){showGameOver();return;}
   if(onlineMode&&isHost)broadcastState();
-  if(!isHuman(GS.turn)&&!isPaused)setTimeout(function(){runCPUTurn(GS.turn);},800);
+  // ★FIX: CPU はホストのみが実行（クライアントで重複実行しない）
+  if(!isHuman(GS.turn)&&!isPaused){
+    if(!onlineMode||isHost)setTimeout(function(){runCPUTurn(GS.turn);},800);
+  }
 }
 // 確実にゲームオーバーをチェック
 function checkWinFull(){
@@ -310,8 +317,14 @@ function checkWinFull(){
 function humanEndTurn(){
   if(!GS||GS.over)return;
   if(!isMyTurn){showMsg('あなたのターンではありません',1500);return;}
+  // ★FIX: オンライン時は GS.turn と myPeerIdx の二重チェック（CPU乗っ取り防止）
+  if(onlineMode&&GS.turn!==myPeerIdx){showMsg('あなたのターンではありません',1500);return;}
   cancelSel();SFX.turnEnd();
-  if(onlineMode&&!isHost){broadcastAction({type:'end_turn'});isMyTurn=false;updUI();return;}
+  if(onlineMode&&!isHost){
+    // ★FIX: owner を明示送信し、レース時の重複advanceTurnを防止
+    broadcastAction({type:'end_turn',owner:myPeerIdx});
+    isMyTurn=false;updUI();return;
+  }
   // 3秒カウントダウン後にターンチェンジ
   showTurnDelay(GS.players[GS.turn].name,function(){advanceTurn();});
 }

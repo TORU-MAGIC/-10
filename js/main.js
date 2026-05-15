@@ -56,7 +56,8 @@ function startOffline(){
 }
 function startGame(){
   switchScreen('gameScreen');initMap();
-  isMyTurn=isHuman(GS.turn);
+  // ★FIX: オンライン考慮（自シートの時のみ true）
+  isMyTurn = onlineMode ? (GS.turn===myPeerIdx) : isHuman(GS.turn);
   document.getElementById('topWeather').textContent=useWeather?GS.weather.icon:'';
   document.getElementById('pauseBtn').style.display=allCPU()?'block':'none';
   document.getElementById('dpad').style.display='flex';
@@ -170,7 +171,9 @@ function loadGame(slot){
     if(!GS.mapOverrides)GS.mapOverrides={};
     if(!GS.chainKills)GS.chainKills=[];
     GS.players.forEach(function(p){if(typeof p._chain!=='number')p._chain=0;});
-    cancelSel();isMyTurn=isHuman(GS.turn);
+    cancelSel();
+    // ★FIX: オンライン考慮（ロード時はオンラインに復帰しないので isHuman で十分だが、防御的に統一）
+    isMyTurn = onlineMode ? (GS.turn===myPeerIdx) : isHuman(GS.turn);
     if(document.getElementById('titleScreen').classList.contains('active')){
       switchScreen('gameScreen');initMap();
     }

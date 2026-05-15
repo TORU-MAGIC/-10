@@ -12,6 +12,19 @@ function updUI(){
   document.getElementById('topTurn').style.color=pc.light;
   document.getElementById('topSub').textContent='💰'+pl.gold+'G  士気:'+pl.morale+'%'+(useWeather?' '+GS.weather.icon:'');
   document.getElementById('topEndBtn').style.opacity=isMyTurn?'1':'.45';
+  document.getElementById('topEndBtn').disabled=!isMyTurn;
+  // ★FIX: 自分が誰なのか・操作可否を可視化（オンライン同期バグの早期発見用）
+  var topMe=document.getElementById('topMe');
+  if(topMe){
+    if(onlineMode){
+      var mePc=PCOLS[myPeerIdx]||{name:'?',light:'#fff',main:'#888'};
+      topMe.style.display='inline-block';
+      topMe.style.background=mePc.main+'33';
+      topMe.style.border='1px solid '+mePc.light;
+      topMe.style.color=mePc.light;
+      topMe.textContent='YOU=P'+(myPeerIdx+1)+(isHost?'(host)':'')+' / '+(isMyTurn?'✅操作可':'⏳待機');
+    } else { topMe.style.display='none'; }
+  }
   var hasSel=!!selUnit,myUnit=hasSel&&selUnit.owner===GS.turn&&isMyTurn;
   document.getElementById('bAtk').style.display=myUnit?'flex':'none';
   document.getElementById('bWait').style.display=myUnit?'flex':'none';
@@ -40,6 +53,8 @@ function onTapPos(row,col,cx,cy){
   hideHpTip();
   var tapped=uAt(GS,row,col);
   if(gMode==='atk'){
+    // ★FIX: オンラインで自シート以外なら攻撃不可
+    if(onlineMode&&GS.turn!==myPeerIdx){gMode='';atkCells=[];render();updUI();return;}
     if(tapped&&tapped.owner!==GS.turn&&atkCells.some(function(a){return a.r===row&&a.c===col;})){SFX.select();execAtk(selUnit,tapped);}
     else{gMode='';atkCells=[];render();updUI();}
     return;
@@ -49,6 +64,8 @@ function onTapPos(row,col,cx,cy){
     return;
   }
   if(!isMyTurn){if(tapped)showHpTip(tapped,cx,cy);return;}
+  // ★FIX: オンライン時は myPeerIdx と GS.turn の整合を二重チェック（防御的）
+  if(onlineMode&&GS.turn!==myPeerIdx){if(tapped)showHpTip(tapped,cx,cy);return;}
   if(tapped&&tapped.owner===GS.turn){
     if(selUnit&&selUnit.id===tapped.id){cancelSel();return;}
     selUnit=tapped;moveCells=tapped.moved?[]:getMovable(GS,tapped);atkCells=tapped.attacked?[]:getAttackable(GS,tapped);aoeCells=[];gMode='sel';SFX.select();render();updUI();showHpTip(tapped,cx,cy);return;
@@ -63,6 +80,8 @@ function onTapPos(row,col,cx,cy){
   if(tapped)showHpTip(tapped,cx,cy);
 }
 function execMove(u,r,c){
+  // ★FIX: オンライン時は所有者厳格チェック
+  if(onlineMode&&(u.owner!==myPeerIdx||GS.turn!==myPeerIdx)){console.warn('[online] execMove blocked');cancelSel();return;}
   var res=doMove(GS,u.id,r,c);
   moveCells=[];
   if(res.captured){addLog(GS.players[GS.turn].name+'の'+UDEFS[u.type].name+'が'+res.terrain.name+'を占領！',{hot:true});SFX.capture();}
@@ -71,6 +90,8 @@ function execMove(u,r,c){
   render();updUI();if(GS.over)showGameOver();
 }
 function execAtk(atk,def){
+  // ★FIX: オンライン時は攻撃者の所有者チェック
+  if(onlineMode&&(atk.owner!==myPeerIdx||GS.turn!==myPeerIdx)){console.warn('[online] execAtk blocked');cancelSel();return;}
   var res=calcAttack(GS,atk.id,def.id);if(!res){cancelSel();return;}
   var m=GS.players[atk.owner].name+'の'+UDEFS[atk.type].name+'[Lv'+(atk.level||1)+']→'+UDEFS[def.type].name+'[Lv'+(def.level||1)+'](-'+res.dmg+')';
   if(res.isCrit)m+='💥会心';if(res.elemMult>=1.4)m+='⚡属性有効';if(res.dkill)m+='【撃破】';if(res.cdmg)m+=' 反撃-'+res.cdmg+(res.ckill?'【撃破】':'');
@@ -80,6 +101,8 @@ function execAtk(atk,def){
 }
 function execKingAoe(){
   if(!selUnit||selUnit.type!=='king'||selUnit.attacked)return;
+  // ★FIX: オンライン時は所有者チェック
+  if(onlineMode&&(selUnit.owner!==myPeerIdx||GS.turn!==myPeerIdx)){console.warn('[online] execKingAoe blocked');cancelSel();return;}
   var results=doKingAoEAction(GS,selUnit.id);
   if(!results||results.length===0){showMsg('範囲内に敵がいません',1500);}
   else{showMsg('👑王の威令！'+results.length+'体に攻撃！',2000);}
@@ -184,6 +207,8 @@ function doProd(gs,type,r,c){
   pl.gold-=def.cost;gs.units.push(mkU(gs,type,gs.turn,placeR,placeC,true));return true;
 }
 function execProd(type){
+  // ★FIX: オンライン時は自分の占領タイル & 自分のターン中のみ
+  if(onlineMode&&(GS.own[prodR][prodC]!==myPeerIdx||GS.turn!==myPeerIdx)){console.warn('[online] execProd blocked');closeProdModal();return;}
   if(doProd(GS,type,prodR,prodC)){
     addLog(GS.players[GS.turn].name+'が'+UDEFS[type].name+'を生産',{hot:true});SFX.produce();
     if(onlineMode)broadcastAction({type:'produce',unitType:type,r:prodR,c:prodC});

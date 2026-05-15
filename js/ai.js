@@ -24,16 +24,48 @@ function cpuSpecialAll(pid,cb){
   // King AoE if surrounded
   GS.units.filter(function(u){return u.owner===pid&&u.type==='king'&&!u.attacked;}).forEach(function(u){
     var targets=[];for(var dr=-KING_AOE_RANGE;dr<=KING_AOE_RANGE;dr++)for(var dc=-KING_AOE_RANGE;dc<=KING_AOE_RANGE;dc++){if(Math.abs(dr)+Math.abs(dc)>KING_AOE_RANGE)continue;var nr=u.row+dr,nc=u.col+dc;if(nr<0||nr>=ROWS||nc<0||nc>=COLS)continue;var tgt=uAt(GS,nr,nc);if(tgt&&tgt.owner!==pid)targets.push(tgt);}
-    if(targets.length>=2){doKingAoEAction(GS,u.id);render();updUI();}
+    if(targets.length>=2){
+      doKingAoEAction(GS,u.id);
+      if(onlineMode&&isHost)broadcastAction({type:'king_aoe',uid:u.id});
+      render();updUI();
+    }
   });
-  GS.units.filter(function(u){return u.owner===pid&&isMagicUnit(u.type)&&!u.attacked;}).forEach(function(u){if(getFieldMagicTargets(GS,u).length>=2){doFieldMagicAction(GS,u.id);render();updUI();}});
-  GS.units.filter(function(u){return u.owner===pid&&u.type==='necromancer';}).forEach(function(u){var sk=GS.units.filter(function(s){return s.owner===pid&&s.type==='skeleton';}).length;if(sk<2&&GS.players[pid].gold>=80&&(GS.summonCounts[u.id]||0)<3){doNecroSummonAction(GS,u.id);render();updUI();}});
+  GS.units.filter(function(u){return u.owner===pid&&isMagicUnit(u.type)&&!u.attacked;}).forEach(function(u){
+    if(getFieldMagicTargets(GS,u).length>=2){
+      doFieldMagicAction(GS,u.id);
+      if(onlineMode&&isHost)broadcastAction({type:'field_magic',uid:u.id});
+      render();updUI();
+    }
+  });
+  GS.units.filter(function(u){return u.owner===pid&&u.type==='necromancer';}).forEach(function(u){
+    var sk=GS.units.filter(function(s){return s.owner===pid&&s.type==='skeleton';}).length;
+    if(sk<2&&GS.players[pid].gold>=80&&(GS.summonCounts[u.id]||0)<3){
+      doNecroSummonAction(GS,u.id);
+      if(onlineMode&&isHost)broadcastAction({type:'necro_summon',uid:u.id});
+      render();updUI();
+    }
+  });
   setTimeout(cb,80);
 }
 function cpuProduceAll(pid,cb){
   if(!GS||GS.over||GS.turn!==pid){cb();return;}
   var cnt=GS.units.filter(function(u){return u.owner===pid;}).length;
-  if(cnt<12){for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){if(GS.own[r][c]===pid&&td(r,c).prod){var eu=uAt(GS,r,c);if(!eu||eu.owner===pid){var type=cpuPickProd(pid,GS.players[pid].aiType);if(type&&doProd(GS,type,r,c)){addLog(GS.players[pid].name+'が'+UDEFS[type].name+'を生産',{cpu:true});SFX.produce();}}}}render();updUI();}
+  if(cnt<12){
+    for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){
+      if(GS.own[r][c]===pid&&td(r,c).prod){
+        var eu=uAt(GS,r,c);
+        if(!eu||eu.owner===pid){
+          var type=cpuPickProd(pid,GS.players[pid].aiType);
+          if(type&&doProd(GS,type,r,c)){
+            addLog(GS.players[pid].name+'が'+UDEFS[type].name+'を生産',{cpu:true});
+            SFX.produce();
+            if(onlineMode&&isHost)broadcastAction({type:'produce',unitType:type,r:r,c:c});
+          }
+        }
+      }
+    }
+    render();updUI();
+  }
   setTimeout(cb,80);
 }
 function cpuActSeq(pid,ids,idx,done){
