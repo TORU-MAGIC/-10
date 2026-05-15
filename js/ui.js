@@ -63,9 +63,9 @@ function onTapPos(row,col,cx,cy){
     if(document.getElementById('bKingAoe').style.display!=='none'){execKingAoe();}
     return;
   }
-  if(!isMyTurn){if(tapped)showHpTip(tapped,cx,cy);return;}
+  if(!isMyTurn){if(tapped)openUnitDetailModal(tapped);return;}
   // ★FIX: オンライン時は myPeerIdx と GS.turn の整合を二重チェック（防御的）
-  if(onlineMode&&GS.turn!==myPeerIdx){if(tapped)showHpTip(tapped,cx,cy);return;}
+  if(onlineMode&&GS.turn!==myPeerIdx){if(tapped)openUnitDetailModal(tapped);return;}
   if(tapped&&tapped.owner===GS.turn){
     if(selUnit&&selUnit.id===tapped.id){cancelSel();return;}
     selUnit=tapped;moveCells=tapped.moved?[]:getMovable(GS,tapped);atkCells=tapped.attacked?[]:getAttackable(GS,tapped);aoeCells=[];gMode='sel';SFX.select();
@@ -80,7 +80,7 @@ function onTapPos(row,col,cx,cy){
     if(GS.own[row][col]===GS.turn&&td(row,col).prod){openProdModal(row,col);return;}
   }
   cancelSel();
-  if(tapped)showHpTip(tapped,cx,cy);
+  if(tapped)openUnitDetailModal(tapped);
 }
 function execMove(u,r,c){
   // ★FIX: オンライン時は所有者厳格チェック
@@ -158,6 +158,7 @@ function showHpTip(u,cx,cy){
   if(u.status&&u.status.length)html+='状態: '+u.status.join(', ')+'<br>';
   var tb=GS?getTerrainBonus(u,u.row,u.col):{atk:0,pdef:0,mdef:0};
   if(tb.atk||tb.pdef||tb.mdef)html+='<span style="color:#52d68a">地形:ATK+'+tb.atk+' pdef+'+tb.pdef+' mdef+'+tb.mdef+'</span>';
+  html+='<div style="font-size:8px;color:#666;margin-top:3px;border-top:1px solid #333;padding-top:2px">👆 クリック/タップで特性詳細</div>';
   t.innerHTML=html;t.classList.add('v');
   t.style.left=Math.min(cx+10,window.innerWidth-220)+'px';t.style.top=Math.min(cy+10,window.innerHeight-160)+'px';
 }
@@ -265,7 +266,7 @@ function openUnitDetailModal(u){
   html+='<div><div style="font-size:16px;font-weight:bold;color:var(--gold)">'+d.name+'</div>';
   html+='<div style="font-size:10px;color:'+ei.col+'">'+ei.name+'</div>';
   html+='<div style="font-size:9px;color:var(--dim)">'+(d.atkType==='magic'?'✨魔法攻撃':'⚔物理攻撃')+'</div></div></div>';
-  if(u)html+='<div style="font-size:11px;color:var(--gold);margin-bottom:4px">★ Lv.'+(u.level||1)+' HP:'+u.hp+'/'+u.mhp+'</div>';
+  if(u){var _owPc=PCOLS[u.owner]||PCOLS[0];html+='<div style="font-size:11px;color:'+_owPc.light+';margin-bottom:4px"><b style="color:'+_owPc.main+'">'+_owPc.name+'</b> ★ Lv.'+(u.level||1)+' HP:'+u.hp+'/'+u.mhp+'</div>';}
   // ステータス
   html+='<div class="udstat">';
   [['HP',d.hp],['ATK',d.atk],['物理防',d.pdef],['魔法防',d.mdef],['移動',d.mov],['射程',d.rng],['コスト',d.cost+'G'],['分類',({heavy:'重装⚙',magic:'魔法✨',swift:'機動⚡'})[TYPE_CAT[type]]||'-']].forEach(function(s){
