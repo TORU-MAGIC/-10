@@ -128,55 +128,55 @@ var CASTLE_POS=[[0,0],[0,23],[17,0],[17,23],[9,0],[9,23],[0,11],[17,12]];
 var INIT_UNITS=[[[1,0],[0,1]],[[1,23],[0,22]],[[16,0],[17,1]],[[16,23],[17,22]],[[8,0],[10,0]],[[8,23],[10,23]],[[1,11],[0,10]],[[16,12],[17,13]]];
 // ===== ユニット定義 (物理/魔法・属性付き) =====
 var UDEFS_BASE={
-  soldier:    {name:'兵士',      sym:'⚔', hp:22,atk:7, pdef:3, mdef:2, atkType:'physical',elem:'none',    mov:3,rng:1,cost:100, desc:'コスパ最強・汎用歩兵'},
-  knight:     {name:'騎士',      sym:'🐴', hp:34,atk:10,pdef:8, mdef:3, atkType:'physical',elem:'thunder', mov:4,rng:1,cost:220, desc:'⚡機動タンク。忍・殺に注意'},
-  archer:     {name:'弓兵',      sym:'🏹', hp:18,atk:8, pdef:1, mdef:2, atkType:'physical',elem:'nature',  mov:2,rng:2,cost:160, desc:'🌿射程2。森でATK/DEF強化'},
-  mage:       {name:'魔法使い',  sym:'🔮', hp:16,atk:13,pdef:0, mdef:5, atkType:'magic',   elem:'fire',    mov:2,rng:2,cost:280, desc:'🔥火魔法。ゴーレムを溶かせ'},
-  dragon:     {name:'ドラゴン',  sym:'🐉', hp:55,atk:16,pdef:8, mdef:6, atkType:'physical',elem:'fire',    mov:5,rng:1,cost:550, desc:'🔥最強飛行・地形無視'},
-  paladin:    {name:'聖騎士',    sym:'✝',  hp:42,atk:10,pdef:12,mdef:5, atkType:'physical',elem:'holy',    mov:3,rng:1,cost:320, desc:'✨pdef:12の物理の壁'},
-  ninja:      {name:'忍者',      sym:'🌀', hp:20,atk:10,pdef:2, mdef:3, atkType:'physical',elem:'dark',    mov:6,rng:1,cost:220, desc:'🌑高速奇襲・騎士特効'},
-  catapult:   {name:'投石機',    sym:'💣', hp:28,atk:15,pdef:0, mdef:0, atkType:'physical',elem:'earth',   mov:1,rng:3,cost:380, desc:'🌍射程3砲撃。山でATK+3'},
-  golem:      {name:'ゴーレム',  sym:'🗿', hp:65,atk:9, pdef:14,mdef:1, atkType:'physical',elem:'earth',   mov:1,rng:1,cost:380, desc:'🌍pdef:14物理壁。魔法で即死'},
-  healer:     {name:'僧侶',      sym:'💊', hp:14,atk:4, pdef:1, mdef:4, atkType:'magic',   elem:'holy',    mov:3,rng:2,cost:180, desc:'✨回復特化。編成の核'},
-  berserker:  {name:'狂戦士',    sym:'💪', hp:32,atk:16,pdef:1, mdef:1, atkType:'physical',elem:'fire',    mov:4,rng:1,cost:260, desc:'🔥超攻撃型。森で更に強化'},
-  witch:      {name:'魔女',      sym:'🧙', hp:15,atk:9, pdef:0, mdef:5, atkType:'magic',   elem:'dark',    mov:3,rng:2,cost:240, desc:'🌑呪いデバフ。フィールド魔法'},
-  pirate:     {name:'海賊',      sym:'🏴', hp:28,atk:9, pdef:3, mdef:2, atkType:'physical',elem:'thunder', mov:4,rng:1,cost:200, desc:'⚡全地形通過。雷属性'},
-  phoenix:    {name:'不死鳥',    sym:'🦅', hp:44,atk:12,pdef:5, mdef:8, atkType:'magic',   elem:'fire',    mov:5,rng:2,cost:480, desc:'🔥1度復活。魔法耐性mdef:8'},
-  spy:        {name:'間諜',      sym:'🕵', hp:16,atk:8, pdef:2, mdef:3, atkType:'physical',elem:'dark',    mov:5,rng:1,cost:200, desc:'🌑高速偵察・森で強化'},
-  titan:      {name:'タイタン',  sym:'👊', hp:90,atk:14,pdef:11,mdef:6, atkType:'physical',elem:'earth',   mov:2,rng:1,cost:620, desc:'🌍最大HP超重装。山でpdef+3'},
-  necromancer:{name:'死霊術師',  sym:'💀', hp:18,atk:16,pdef:0, mdef:4, atkType:'magic',   elem:'dark',    mov:2,rng:3,cost:480, desc:'🌑射程3・召喚・毒。放置厳禁'},
-  assassin:   {name:'暗殺者',    sym:'🗡', hp:24,atk:22,pdef:1, mdef:1, atkType:'physical',elem:'dark',    mov:6,rng:1,cost:450, desc:'🌑会心20%。ATK:22で即死級'},
-  arcanelord: {name:'魔法王',    sym:'👑', hp:30,atk:21,pdef:2, mdef:10,atkType:'magic',   elem:'ice',     mov:3,rng:3,cost:650, desc:'❄️射程3・mdef:10・最強魔法'},
-  valkyrie:   {name:'ヴァルキリー',sym:'⚡',hp:46,atk:14,pdef:8, mdef:6, atkType:'physical',elem:'holy',    mov:5,rng:2,cost:560, desc:'✨飛行重装・射程2・神殿強化'},
-  monk:       {name:'モンク',    sym:'👐', hp:40,atk:16,pdef:5, mdef:1, atkType:'physical',elem:'thunder', mov:4,rng:1,cost:320, desc:'⚡重装特効×4・物理貫通・魔法超脆弱'},
-  dualblader: {name:'二刀士',    sym:'⚔', hp:28,atk:13,pdef:2, mdef:2, atkType:'physical',elem:'thunder', mov:5,rng:1,cost:380, desc:'⚡2回攻撃（反撃前）'},
-  skeleton:   {name:'スケルトン',sym:'💀', hp:18,atk:7, pdef:2, mdef:0, atkType:'physical',elem:'dark',    mov:2,rng:1,cost:0,   desc:'🌑召喚ユニット。mdef:0'},
-  king:       {name:'王様',      sym:'👑', hp:55,atk:13,pdef:7, mdef:7, atkType:'physical',elem:'holy',    mov:3,rng:2,cost:0,   desc:'✨王の威令(広域)・倒されると即敗北'},
-  hero:       {name:'英雄',      sym:'🦸', hp:44,atk:22,pdef:5, mdef:3, atkType:'physical',elem:'holy',    mov:5,rng:1,cost:550, desc:'✨王様特効×5。全軍の希望'},
+  soldier:    {name:'兵士',      sym:'⚔', hp:24,atk:7, pdef:3, mdef:2, atkType:'physical',elem:'none',    mov:3,rng:1,cost:100, desc:'コスパ最強・汎用歩兵'},
+  knight:     {name:'騎士',      sym:'🐴', hp:36,atk:10,pdef:9, mdef:3, atkType:'physical',elem:'thunder', mov:4,rng:1,cost:260, desc:'⚡別の敵に2回攻撃・機動装甲'},
+  archer:     {name:'弓兵',      sym:'🏹', hp:18,atk:9, pdef:1, mdef:2, atkType:'physical',elem:'nature',  mov:2,rng:2,cost:170, desc:'🌿射程2の安定火力・森で強化'},
+  mage:       {name:'魔法使い',  sym:'🔮', hp:18,atk:14,pdef:0, mdef:5, atkType:'magic',   elem:'fire',    mov:2,rng:2,cost:280, desc:'🔥火魔法・守護光で味方を強化'},
+  dragon:     {name:'ドラゴン',  sym:'🐉', hp:62,atk:18,pdef:9, mdef:6, atkType:'physical',elem:'fire',    mov:5,rng:1,cost:800, desc:'🔥直線炎ブレス3マス・飛行最強格'},
+  paladin:    {name:'聖騎士',    sym:'✝',  hp:46,atk:10,pdef:14,mdef:5, atkType:'physical',elem:'holy',    mov:3,rng:1,cost:340, desc:'✨pdef14の鉄壁・物理を無効化'},
+  ninja:      {name:'忍者',      sym:'🌀', hp:20,atk:11,pdef:2, mdef:3, atkType:'physical',elem:'dark',    mov:6,rng:1,cost:230, desc:'🌑攻撃まで不可視の暗殺奇襲'},
+  catapult:   {name:'投石機',    sym:'💣', hp:26,atk:18,pdef:0, mdef:0, atkType:'physical',elem:'earth',   mov:1,rng:3,cost:380, desc:'🌍射程3の超火力砲・紙装甲'},
+  golem:      {name:'ゴーレム',  sym:'🗿', hp:74,atk:9, pdef:16,mdef:1, atkType:'physical',elem:'earth',   mov:1,rng:1,cost:400, desc:'🌍pdef16の要塞・魔法に激弱'},
+  healer:     {name:'僧侶',      sym:'💊', hp:16,atk:4, pdef:1, mdef:5, atkType:'magic',   elem:'holy',    mov:3,rng:2,cost:180, desc:'✨毎ターン回復・支援の要'},
+  berserker:  {name:'狂戦士',    sym:'💪', hp:34,atk:18,pdef:1, mdef:1, atkType:'physical',elem:'fire',    mov:4,rng:1,cost:270, desc:'🔥atk18の超火力・打たれ弱い'},
+  witch:      {name:'魔女',      sym:'🧙', hp:16,atk:10,pdef:0, mdef:6, atkType:'magic',   elem:'dark',    mov:3,rng:2,cost:250, desc:'🌑呪詛で隣接敵を全員弱体化'},
+  pirate:     {name:'海賊',      sym:'🏴', hp:30,atk:10,pdef:3, mdef:2, atkType:'physical',elem:'thunder', mov:4,rng:1,cost:210, desc:'⚡敵のフィールド魔法を強奪'},
+  phoenix:    {name:'不死鳥',    sym:'🦅', hp:46,atk:13,pdef:5, mdef:9, atkType:'magic',   elem:'fire',    mov:5,rng:2,cost:480, desc:'🔥1度復活・mdef9の魔法耐性'},
+  spy:        {name:'スパイ',    sym:'🕵', hp:18,atk:8, pdef:2, mdef:3, atkType:'physical',elem:'dark',    mov:6,rng:1,cost:200, desc:'🌑忍者看破・最速の偵察'},
+  titan:      {name:'タイタン',  sym:'👊', hp:108,atk:14,pdef:13,mdef:7,atkType:'physical',elem:'earth',   mov:2,rng:1,cost:700, desc:'🌍hp108の超重装・全てを耐える'},
+  necromancer:{name:'死霊術師',  sym:'💀', hp:20,atk:17,pdef:0, mdef:4, atkType:'magic',   elem:'dark',    mov:2,rng:3,cost:490, desc:'🌑射程3・召喚・毒の死霊術'},
+  assassin:   {name:'暗殺者',    sym:'🗡', hp:24,atk:24,pdef:1, mdef:1, atkType:'physical',elem:'dark',    mov:6,rng:1,cost:490, desc:'🌑atk24・会心20%の即死級'},
+  arcanelord: {name:'魔法王',    sym:'👑', hp:38,atk:24,pdef:2, mdef:12,atkType:'magic',   elem:'ice',     mov:3,rng:3,cost:1200,desc:'❄️氷ミサイル・魔法2回・最強魔導'},
+  valkyrie:   {name:'ヴァルキリー',sym:'⚡',hp:48,atk:15,pdef:9, mdef:7, atkType:'physical',elem:'holy',    mov:5,rng:2,cost:560, desc:'✨飛行射程2の万能戦士'},
+  monk:       {name:'モンク',    sym:'👐', hp:40,atk:17,pdef:5, mdef:1, atkType:'physical',elem:'thunder', mov:4,rng:1,cost:330, desc:'⚡重装特効×4・物理貫通'},
+  dualblader: {name:'二刀士',    sym:'⚔', hp:30,atk:14,pdef:2, mdef:2, atkType:'physical',elem:'thunder', mov:5,rng:1,cost:350, desc:'⚡同じ敵に2連撃・反撃前'},
+  skeleton:   {name:'スケルトン',sym:'💀', hp:18,atk:7, pdef:2, mdef:0, atkType:'physical',elem:'dark',    mov:2,rng:1,cost:0,   desc:'🌑召喚ユニット・mdef0'},
+  king:       {name:'王様',      sym:'👑', hp:58,atk:13,pdef:8, mdef:8, atkType:'physical',elem:'holy',    mov:3,rng:2,cost:0,   desc:'✨王の威令(広域)・倒されると即敗北'},
+  hero:       {name:'英雄',      sym:'🦸', hp:48,atk:23,pdef:6, mdef:3, atkType:'physical',elem:'holy',    mov:5,rng:1,cost:560, desc:'✨王様特効×5・全軍の希望'},
 };
 var UDEFS=JSON.parse(JSON.stringify(UDEFS_BASE));
 // カスタマイズされた値をlocalStorageから読み込む
 function loadCustom(){try{var s=localStorage.getItem('kok9_custom');if(s){var d=JSON.parse(s);Object.keys(d).forEach(function(t){if(UDEFS[t])Object.assign(UDEFS[t],d[t]);});}}catch(e){}}
 var UNIT_TIPS={
   soldier:'序盤の主力。コスパ最強で大量生産が鍵。城砦に配置して守備の核に。',
-  knight:'⚡機動タンク。高MOVで素早く前線へ。pdef:8で物理に強い。忍者・暗殺者には注意。雷属性で火系に有効。',
+  knight:'⚡機動タンク。1ターンに別々の敵へ2回攻撃できる。pdef:9で物理に強い。雷属性で火系に有効。',
   archer:'🌿射程2の安定火力。森(tid=1)でATK+2/pdef+2の強化。前線は禁物。大地系に強い。',
-  mage:'🔥火魔法ユニット。atkType:magicなのでgolemのmdef:1を直撃。pdef:0なので護衛必須。フィールド魔法も強力。',
-  dragon:'🔥地形を無視する最強飛行ユニット。pdef:8とmdef:6でバランス良し。自然系に1.5倍。',
-  paladin:'✨pdef:12で物理攻撃をほぼ無効化。Atktype:physicalだが聖属性で闇に1.8倍。魔法には注意（mdef:5）。',
+  mage:'🔥火魔法ユニット。フィールド魔法で隣接する味方全員に2ターン物理防御+5を付与。pdef:0なので護衛必須。',
+  dragon:'🔥フィールド魔法で直線3マスに炎ブレスを噴射。飛行で地形無視。コスト800Gの切り札。',
+  paladin:'✨pdef:14で物理攻撃をほぼ無効化。Atktype:physicalだが聖属性で闇に1.8倍。魔法には注意（mdef:5）。',
   ninja:'🌑重装(heavy)に3倍特効。騎士も3倍。mov:6で先手必勝。森でpdef+2。物理貫通に注意。',
   catapult:'🌍射程3の最長砲撃。山でATK+3の強力ボーナス。pdef/mdef:0なので最後列に配置。',
-  golem:'🌍pdef:14で物理攻撃を完全封殺。しかしmdef:1のため魔法攻撃で即死。魔法ユニットから遠ざけよ。',
-  healer:'✨毎ターン隣接仲間を20%回復。神殿でATK+3。mdef:4で魔法に耐性。編成の中心に据えよ。',
-  berserker:'🔥ATK:16の超攻撃型。森でATK+2の追加強化。pdef/mdef:1のガラス。使い捨て覚悟で突撃。',
-  witch:'🌑呪い付与+フィールド魔法で集団デバフ。atktype:magicでgolemを溶かせる。pdef:0注意。',
-  pirate:'⚡全地形を通過できる特殊ユニット。雷属性で火系に1.5倍。機動型の代替として活用可。',
-  phoenix:'🔥mdef:8の魔法耐久力が強み。HP40%で1度復活。射程2で安全な距離から魔法攻撃。',
-  spy:'🌑mov:5の高速偵察。森でpdef+2/ATK+2。戦闘より占領・情報収集に使え。',
-  titan:'🌍HP:90/pdef:11/mdef:6の全方位タンク。山でpdef+3。遅いがどこにでも置ける壁。',
+  golem:'🌍pdef:16で物理攻撃を完全封殺。しかしmdef:1のため魔法攻撃で即死。魔法ユニットから遠ざけよ。',
+  healer:'✨毎ターン隣接仲間を20%回復。神殿でATK+3。mdef:5で魔法に耐性。編成の中心に据えよ。',
+  berserker:'🔥ATK:18の超攻撃型。森でATK+2の追加強化。pdef/mdef:1のガラス。使い捨て覚悟で突撃。',
+  witch:'🌑フィールド魔法で隣接する敵全員に3ターンの呪い。攻撃・防御・移動が1〜10ランダムで低下。',
+  pirate:'⚡フィールド魔法で隣接する敵のフィールド魔法を強奪。複数奪え、永久に使い続けられる。',
+  phoenix:'🔥mdef:9の魔法耐久力が強み。HP40%で1度復活。射程2で安全な距離から魔法攻撃。',
+  spy:'🌑スパイがいると敵忍者のステルスを看破できる。mov:5の高速偵察。占領・情報収集に使え。',
+  titan:'🌍HP:108/pdef:13/mdef:7の全方位タンク。山でpdef+3。遅いがどこにでも置ける壁。',
   necromancer:'🌑射程3で後方から毒・呪い。敵撃破でスケルトン自動召喚。放置すると無限増殖の脅威。',
-  assassin:'🌑会心率20%でATK:22。王様以外を一撃の恐れ。pdef/mdef:1のガラス砲。護衛付きで突撃。',
-  arcanelord:'❄️ATK:21/mdef:10/射程3の最強魔法ユニット。雷・大地に1.3〜1.5倍。コスト最高だが価値あり。',
+  assassin:'🌑会心率20%でATK:24。王様以外を一撃の恐れ。pdef/mdef:1のガラス砲。護衛付きで突撃。',
+  arcanelord:'❄️フィールド魔法で2マス先の敵に氷ミサイル。火属性に特効。フィールド魔法を1ターン2回使用可。コスト1200G。',
   valkyrie:'✨飛行+射程2+重装の万能ユニット。神殿でATK+2/mdef+3。聖属性で闇に1.8倍。',
   monk:'⚡タイタン・ゴーレムを物理貫通で叩ける唯一の存在(×4)。mdef:1のため魔法には即死注意。',
   dualblader:'⚡2回攻撃で確実に仕留める。反撃前に2発。雷属性で火系の魔法ユニットに有効。',
@@ -193,8 +193,69 @@ var PCOLS=[
   {main:'#117a8b',light:'#40e0d0',dark:'#0a4a55',name:'青緑王国'},
   {main:'#e67e22',light:'#ffb066',dark:'#a04a08',name:'橙王国'},
   {main:'#d63384',light:'#ff80c0',dark:'#8b1f5a',name:'桃王国'},
+  // ★シナリオモード: 中央軍（最大9番目のプレイヤー）用の色 — 暗紅/灰の威圧色
+  {main:'#3a2828',light:'#9a7878',dark:'#1a1010',name:'⚔ 中央守備隊'},
 ];
 var AI_TYPES=['aggressive','cautious','genius','aggressive'];
 var WEATHERS=[{name:'晴天',icon:'☀',atk:0,mov:0,inc:0,def:0},{name:'大雨',icon:'🌧',atk:-1,mov:-1,inc:0,def:0},{name:'濃霧',icon:'🌫',atk:-2,mov:0,inc:0,def:1},{name:'嵐',icon:'⛈',atk:-2,mov:-2,inc:-20,def:0},{name:'好天',icon:'🌟',atk:2,mov:1,inc:10,def:0},{name:'地震',icon:'🌋',atk:-1,mov:-2,inc:-10,def:2},{name:'聖域',icon:'🏛',atk:0,mov:0,inc:5,def:0,sanctuary:true}];
 var RAND_EVENTS=[{name:'行商人来訪',fn:'evMerchant'},{name:'疫病発生',fn:'evPlague'},{name:'義勇兵参集',fn:'evRecruit'},{name:'宝の発見',fn:'evTreasure'}];
 function isMagicUnit(t){return['mage','witch','arcanelord','necromancer','healer','phoenix','catapult'].indexOf(t)>=0;}
+
+/* ===== 分隊システム（大戦略風）=====
+ *  各ユニットは「部隊」であり、内部に複数の個体を持つ。
+ *   小型 (5体): soldier/archer/spy/ninja/healer/mage/witch/monk/pirate/dualblader/berserker/skeleton
+ *   中型 (4体): knight/paladin/necromancer/assassin/valkyrie/hero/arcanelord
+ *   大型 (2体): dragon/titan/golem/phoenix/catapult/king
+ *  攻撃力は (squadAlive / squadSize) で減衰。
+ *  ダメージは HP比率に応じて squadAlive を切り上げで再計算。
+ *  → 大型は1体失うと攻撃力50%減という大幅ペナルティ。
+ */
+function getSquadSize(type){
+  var big=['dragon','titan','golem','phoenix','catapult','king'];
+  var mid=['knight','paladin','necromancer','assassin','valkyrie','hero','arcanelord'];
+  if(big.indexOf(type)>=0)return 2;
+  if(mid.indexOf(type)>=0)return 4;
+  return 5; // 小型がデフォルト
+}
+// 部隊数係数 (1.0 = 完全編成, 0.0 = 全滅) — 切り捨てで連動
+function squadMult(u){
+  if(!u||!u.squadSize||u.squadSize<=0)return 1;
+  var a=(u.squadAlive==null)?u.squadSize:u.squadAlive;
+  return Math.max(0,a)/u.squadSize;
+}
+// HP 変動後の squadAlive を再計算（撃破時は0、それ以外は切り上げ）
+function recalcSquadAlive(u){
+  if(!u||!u.squadSize)return;
+  if(u.hp<=0){u.squadAlive=0;return;}
+  if(!u.mhp||u.mhp<=0){u.squadAlive=u.squadSize;return;}
+  // HP比率を squadSize で割って切り上げ（1HP残でも1体生存扱い）
+  u.squadAlive=Math.max(1,Math.ceil(u.hp/u.mhp*u.squadSize));
+}
+
+// ===== 配備モード =====
+// 'normal'=通常, 'all'=全ユニット配備, 'pick'=ユニット選択
+var startMode='normal';
+// プレイヤー別の選択ユニットリスト（pick モード）
+var pUnitPicks=[];
+
+// ===== 索敵（Fog of War）=====
+var useFoW=false;
+var useAmbush=false; // 待ち伏せ（FoW と連動）
+
+// ===== ユニット別索敵範囲 =====
+// 飛行系・偵察系ほど広く、鈍足重装は狭い
+var SIGHT_RANGE={
+  soldier:3, knight:4, archer:5, mage:3, dragon:7,
+  paladin:3, ninja:5, catapult:2, golem:2, healer:3,
+  berserker:3, witch:3, pirate:4, phoenix:7, spy:8,
+  titan:2, necromancer:3, assassin:5, arcanelord:4,
+  valkyrie:7, monk:3, dualblader:4, skeleton:2,
+  king:4, hero:6
+};
+
+// 全配備用のユニット順（コスト順）— skeleton/kingは除く
+var ALL_DEPLOY_TYPES=[
+  'soldier','archer','knight','ninja','spy','pirate','dualblader','berserker',
+  'monk','mage','healer','witch','catapult','necromancer','arcanelord',
+  'paladin','valkyrie','hero','phoenix','golem','titan','dragon','assassin','hero'
+].filter(function(t,i,a){return a.indexOf(t)===i;});

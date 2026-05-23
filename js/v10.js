@@ -8,6 +8,454 @@
  * v10.0 拡張ブロック - 戦闘ビュー / 戦闘演出 / AI強化 / コンボ・シナジー
  * ====================================================================== */
 
+/* ========================================================================
+ * BGM: 竜王の戦歌 / 竜王の戦歌2 を連続再生
+ * ====================================================================== */
+var bgmEnabled = (localStorage.getItem('kok9_bgm') !== '0'); // デフォルトON
+var _bgmFadeRaf = null;
+var _bgmTracks = ['bgm','bgm2'];
+var _bgmIdx = 0;
+
+function _bgmEl(){ return document.getElementById(_bgmTracks[_bgmIdx]); }
+
+// 各トラックの終了時に次の曲へ自動切替
+function _bgmInitEnded(){
+  _bgmTracks.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && !el._endedHooked){
+      el._endedHooked = true;
+      el.addEventListener('ended', function(){
+        _bgmIdx = (_bgmIdx + 1) % _bgmTracks.length;
+        if(bgmEnabled) bgmPlay();
+      });
+    }
+  });
+}
+
+function bgmPlay(){
+  if(!bgmEnabled) return;
+  _bgmInitEnded();
+  var a = _bgmEl(); if(!a) return;
+  a.volume = 0;
+  var p = a.play();
+  if(p instanceof Promise){
+    p.then(function(){
+      _bgmFadeIn(a, 0.55);
+    }).catch(function(){
+      // 自動再生ブロック → ボタン表示を「▶BGM」に切替
+      var btn = document.getElementById('bBGM');
+      if(btn){ btn.textContent = '▶BGM'; btn.classList.remove('sel'); }
+    });
+  } else {
+    _bgmFadeIn(a, 0.55);
+  }
+}
+
+function bgmStop(){
+  _bgmTracks.forEach(function(id){
+    var a = document.getElementById(id);
+    if(a){ a.pause(); a.currentTime = 0; }
+  });
+  if(_bgmFadeRaf){ cancelAnimationFrame(_bgmFadeRaf); _bgmFadeRaf = null; }
+}
+
+function bgmPause(){
+  var a = _bgmEl(); if(!a) return;
+  _bgmFadeOut(a, function(){ a.pause(); });
+}
+
+function bgmResume(){
+  if(!bgmEnabled) return;
+  var a = _bgmEl(); if(!a || !a.paused) return;
+  var p = a.play();
+  if(p instanceof Promise) p.then(function(){ _bgmFadeIn(a, 0.55); }).catch(function(){});
+  else _bgmFadeIn(a, 0.55);
+}
+
+function bgmToggle(){
+  bgmEnabled = !bgmEnabled;
+  try{ localStorage.setItem('kok9_bgm', bgmEnabled ? '1' : '0'); }catch(e){}
+  if(bgmEnabled){ bgmPlay(); } else { bgmPause(); }
+  _bgmUpdBtn();
+}
+
+function _bgmUpdBtn(){
+  var btn = document.getElementById('bBGM');
+  if(!btn) return;
+  btn.textContent = bgmEnabled ? '🎵BGM' : '🔇BGM';
+  btn.classList.toggle('sel', bgmEnabled);
+}
+
+function _bgmFadeIn(a, target){
+  if(_bgmFadeRaf){ cancelAnimationFrame(_bgmFadeRaf); _bgmFadeRaf = null; }
+  var step = function(){
+    a.volume = Math.min(target, a.volume + 0.015);
+    if(a.volume < target - 0.001) _bgmFadeRaf = requestAnimationFrame(step);
+    else { a.volume = target; _bgmFadeRaf = null; }
+  };
+  _bgmFadeRaf = requestAnimationFrame(step);
+}
+
+function _bgmFadeOut(a, cb){
+  if(_bgmFadeRaf){ cancelAnimationFrame(_bgmFadeRaf); _bgmFadeRaf = null; }
+  var step = function(){
+    a.volume = Math.max(0, a.volume - 0.025);
+    if(a.volume > 0.001) _bgmFadeRaf = requestAnimationFrame(step);
+    else { a.volume = 0; _bgmFadeRaf = null; if(cb) cb(); }
+  };
+  _bgmFadeRaf = requestAnimationFrame(step);
+}
+
+// 初期化: ページロード完了後にボタン状態を更新
+document.addEventListener('DOMContentLoaded', function(){ _bgmUpdBtn(); });
+
+/* ========================================================================
+ * 索敵 / Fog of War システム
+ * ====================================================================== */
+
+// 現在の表示プレイヤーの可視マップ（2D boolean[][]）
+var _visMap=null;
+
+// pid のユニット索敵範囲から可視セルを計算
+function computeVisMap(pid){
+  var vis=[];
+  for(var r=0;r<ROWS;r++){vis[r]=[];for(var c=0;c<COLS;c++)vis[r][c]=false;}
+  if(!GS)return vis;
+  GS.units.forEach(function(u){
+    if(u.owner!==pid||u.hp<=0)return;
+    var sr=SIGHT_RANGE[u.type]||3;
+    for(var dr=-sr;dr<=sr;dr++)for(var dc=-sr;dc<=sr;dc++){
+      // マンハッタン距離で円形索敵
+      if(Math.abs(dr)+Math.abs(dc)>sr)continue;
+      var nr=u.row+dr,nc=u.col+dc;
+      if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)vis[nr][nc]=true;
+    }
+  });
+  return vis;
+}
+
+// 毎フレーム render() から呼ばれる（ゲームが動いている間のみ）
+function updateVisMap(){
+  if(!useFoW||!GS){_visMap=null;return;}
+  _visMap=computeVisMap(getMyPid());
+}
+
+// セルが現在のプレイヤーから見えているか
+function isCellVisible(r,c){
+  if(!useFoW)return true;
+  if(!_visMap)return true;
+  return !!(_visMap[r]&&_visMap[r][c]);
+}
+
+// ユニットが霧の中に隠れているか（FoW 版）
+// render.js の isUnitHidden より優先
+function isCellHiddenByFoW(u){
+  if(!useFoW)return false;
+  if(!GS)return false;
+  var myPid=getMyPid();
+  if(u.owner===myPid)return false; // 自軍は常に表示
+  return !isCellVisible(u.row,u.col);
+}
+
+/* ========================================================================
+ * 待ち伏せ（Ambush）チェック
+ * 移動後に呼ばれる。移動先に近い霧の中の敵が先制攻撃してくる。
+ * ====================================================================== */
+
+// moveUnit 実行前の可視マップを一時保存
+var _prevVisMap=null;
+function savePrevVisMap(){
+  if(!useFoW||!useAmbush||!GS){_prevVisMap=null;return;}
+  _prevVisMap=computeVisMap(getMyPid());
+}
+
+// execMove 後に呼ぶ: 待ち伏せを検出して先制攻撃を実行
+// ★Bug#1: オンラインでは ambush 自体を broadcast して全員でcalcAttackを実行
+//   （ローカル限定のcalcAttackがホストRNGseedをずらすデシンクを解消）
+function checkAndDoAmbush(movedUnit,callback){
+  if(!useFoW||!useAmbush||!_prevVisMap||!GS){if(callback)callback();return;}
+  var myPid=getMyPid();
+  // 移動先の周囲にいる敵で、移動前は見えなかった（霧の中）敵を検索
+  var ambushers=[];
+  GS.units.forEach(function(u){
+    if(u.owner===myPid||u.hp<=0)return;
+    // 移動前は不可視、かつ攻撃射程内に入った
+    var wasHidden=!(_prevVisMap[u.row]&&_prevVisMap[u.row][u.col]);
+    var rng=UDEFS[u.type]?UDEFS[u.type].rng:1;
+    var inRange=mdist(movedUnit.row,movedUnit.col,u.row,u.col)<=rng;
+    if(wasHidden&&inRange&&!u.attacked)ambushers.push(u);
+  });
+  _prevVisMap=null;
+  if(ambushers.length===0){if(callback)callback();return;}
+  // 待ち伏せ発動: 最初の1体が先制攻撃
+  var ambusher=ambushers[0];
+  showMsg('⚠ 待ち伏せ！'+UDEFS[ambusher.type].name+'が先制攻撃！',2500);
+  // 少し遅延してから先制攻撃を実行
+  setTimeout(function(){
+    // ★Bug#1: オンライン時は ambush action を broadcast（全員のRNGを同期させる）
+    if(onlineMode){
+      broadcastAction({type:'ambush',atkId:ambusher.id,defId:movedUnit.id});
+    }
+    // ローカルでも即時実行（オフライン兼用 / 自分のクライアントの演出表示用）
+    executeAmbush(ambusher.id, movedUnit.id, callback);
+  },600);
+}
+
+// 待ち伏せの攻撃実行（applyRemoteAction からも呼ばれる）
+function executeAmbush(atkId, defId, callback){
+  var atk=GS.units.find(function(u){return u.id===atkId;});
+  var def=GS.units.find(function(u){return u.id===defId;});
+  if(!atk||!def||atk.hp<=0||def.hp<=0){if(callback)callback();return;}
+  var atkType=atk.type, atkOwner=atk.owner;
+  var res=calcAttack(GS,atkId,defId);
+  if(res){
+    addLog('⚠ 待ち伏せ！'+PCOLS[atkOwner].name+'の'+UDEFS[atkType].name+'が先制攻撃(-'+res.dmg+')',{hot:true});
+    // 先制攻撃では反撃ダメージの表示を抑制（HP変動はcalcAttack内で既に適用済み）
+    res.cdmg=0;res.ckill=false;
+    // 戦闘画面は battleViewMode に従う（observer 含む全員で表示）
+    var iAmInv=(atkOwner===myPeerIdx||def.owner===myPeerIdx);
+    var humanInv=(typeof isHuman==='function')&&(isHuman(atkOwner)||isHuman(def.owner));
+    var show=(!onlineMode)||iAmInv||(humanInv&&battleViewMode!=='self'&&battleSpeedMode!=='skip');
+    if(show){
+      showBattle(res,function(){
+        render();updUI();
+        if(GS.over){showGameOver();return;}
+        if(callback)callback();
+      });
+    } else {
+      render();updUI();
+      if(GS.over){showGameOver();return;}
+      if(callback)callback();
+    }
+  } else {
+    if(callback)callback();
+  }
+}
+
+/* ========================================================================
+ * v10.1: フィールド魔法システム（ユニット別）
+ * ====================================================================== */
+var FM_SPELLS={
+  dragon:    {name:'🔥炎ブレス',  mode:'dir',    desc:'直線3マスを焼く'},
+  mage:      {name:'🛡守護光',    mode:'instant',desc:'隣接味方に物防+5(2T)'},
+  witch:     {name:'💀呪詛',      mode:'instant',desc:'隣接敵全員を呪う(3T)'},
+  arcanelord:{name:'❄氷ミサイル', mode:'target', desc:'2マス先の敵を撃つ'},
+  weaken:    {name:'✨弱体魔法',   mode:'instant',desc:'範囲内の敵を弱体化'}
+};
+function fmNativeSpell(type){
+  return {dragon:'dragon',mage:'mage',witch:'witch',arcanelord:'arcanelord',
+          necromancer:'weaken',healer:'weaken',phoenix:'weaken',catapult:'weaken'}[type]||null;
+}
+// このユニットが使えるフィールド魔法スペル一覧
+function fmSpellsFor(u){
+  var list=[];if(!u)return list;
+  var nat=fmNativeSpell(u.type);
+  if(nat&&!u.fmStolen)list.push(nat);
+  if(u.stolenMagic)u.stolenMagic.forEach(function(s){if(list.indexOf(s)<0)list.push(s);});
+  return list;
+}
+function fmMaxUses(u){return (u&&u.type==='arcanelord')?2:1;}
+function canFieldMagic(u){
+  if(!u)return false;
+  if(fmSpellsFor(u).length===0)return false;
+  if((u.fmUsed||0)>=fmMaxUses(u))return false;
+  if(u.attacked)return false;
+  return true;
+}
+// 海賊が強奪できる隣接敵（フィールド魔法持ち）
+function pirateStealTargets(p){
+  if(!GS||!p)return [];
+  var dirs=[[0,1],[0,-1],[1,0],[-1,0]],res=[];
+  dirs.forEach(function(d){
+    var u=uAt(GS,p.row+d[0],p.col+d[1]);
+    if(u&&u.owner!==p.owner&&u.hp>0&&fmSpellsFor(u).length>0)res.push(u);
+  });
+  return res;
+}
+
+// ===== フィールド魔法 実行（engine の doFieldMagicAction を上書き）=====
+function doFieldMagicAction(gs,uid,opt){
+  opt=opt||{};
+  var u=null;for(var i=0;i<gs.units.length;i++){if(gs.units[i].id===uid){u=gs.units[i];break;}}
+  if(!u)return{ok:false,msg:'対象がいません'};
+  var spell=opt.spell||fmSpellsFor(u)[0];
+  if(!spell)return{ok:false,msg:'フィールド魔法を持っていません'};
+  var r;
+  if(spell==='dragon')r=_fmDragon(gs,u,opt.dir);
+  else if(spell==='mage')r=_fmMage(gs,u);
+  else if(spell==='witch')r=_fmWitch(gs,u);
+  else if(spell==='arcanelord')r=_fmArcane(gs,u,opt.targetId);
+  else r=_fmWeaken(gs,u);
+  if(r&&r.ok){
+    u.fmUsed=(u.fmUsed||0)+1;u.moved=true;
+    if((u.fmUsed)>=fmMaxUses(u))u.attacked=true;
+    checkWin(gs);
+  }
+  return r;
+}
+function _fmDragon(gs,u,dir){
+  if(!dir)return{ok:false,msg:'方向を選択してください'};
+  var cells=[],hits=[];
+  for(var s=1;s<=3;s++){
+    var nr=u.row+dir.dr*s,nc=u.col+dir.dc*s;
+    if(nr<0||nr>=ROWS||nc<0||nc>=COLS)break;
+    cells.push({r:nr,c:nc});
+    var t=uAt(gs,nr,nc);
+    if(t&&t.owner!==u.owner&&t.hp>0)hits.push(t);
+  }
+  if(cells.length===0)return{ok:false,msg:'その方向には撃てません'};
+  var killed=0;
+  hits.forEach(function(t){
+    var base=Math.round(effAtk(u)*1.15);
+    var dmg=Math.max(7,base-Math.floor(effMDef(t)/2)+Math.floor(rnd(gs)*7)-3);
+    dmg=Math.round(dmg*getElemMult('fire',UDEFS[t.type].elem||'none'));
+    t.hp-=dmg;
+    if(typeof recalcSquadAlive==='function')recalcSquadAlive(t); // ★分隊更新
+    if(t.hp<=0){
+      gs.stats[u.owner].killed++;gs.stats[t.owner].lost++;
+      if(t.type==='king')gs.stats[u.owner].kingKills=(gs.stats[u.owner].kingKills||0)+1;
+      // ★シナリオ: 炎ブレスで中央王撃破
+      if(gs.scenarioMode&&t.type==='king'&&t.owner===gs.scenarioGarrisonPid){
+        gs.scenarioKingKiller=u.owner;
+        addLog('🔥👑 '+PCOLS[u.owner].name+' のドラゴンが中央王を焼き払った！',{hot:true});
+      }
+      killLevelUp(gs,u,t);killed++;
+    }
+  });
+  gs.units=gs.units.filter(function(x){return x.hp>0;});
+  if(typeof spawnMapFx==='function')spawnMapFx({kind:'linefire',cells:cells,dur:1000});
+  if(typeof SFX!=='undefined'&&SFX.dragon)SFX.dragon();
+  addLog(PCOLS[u.owner].name+'のドラゴンが炎ブレス！'+hits.length+'体直撃'+(killed?'（'+killed+'撃破）':''),{hot:true});
+  return{ok:true,msg:'🔥炎ブレス！'+hits.length+'体に直撃！',hits:hits.length};
+}
+function _fmMage(gs,u){
+  var dirs=[[0,1],[0,-1],[1,0],[-1,0]],cells=[],n=0;
+  dirs.forEach(function(d){
+    var a=uAt(gs,u.row+d[0],u.col+d[1]);
+    if(a&&a.owner===u.owner&&a.hp>0){
+      a.fx=a.fx||[];a.fx.push({k:'guard',t:2,pdef:5});
+      cells.push({r:a.row,c:a.col});n++;
+    }
+  });
+  if(n===0)return{ok:false,msg:'隣接する味方がいません'};
+  if(typeof spawnMapFx==='function')spawnMapFx({kind:'guard',cells:cells,dur:1100});
+  if(typeof SFX!=='undefined'&&SFX.magic)SFX.magic();
+  addLog(PCOLS[u.owner].name+'の魔法使いが守護光！味方'+n+'体に物防+5(2T)',{hot:true});
+  return{ok:true,msg:'🛡守護光！味方'+n+'体に物理防御+5(2ターン)',hits:n};
+}
+function _fmWitch(gs,u){
+  var dirs=[[0,1],[0,-1],[1,0],[-1,0]],cells=[],n=0;
+  dirs.forEach(function(d){
+    var e=uAt(gs,u.row+d[0],u.col+d[1]);
+    if(e&&e.owner!==u.owner&&e.hp>0){
+      var a=1+Math.floor(rnd(gs)*10),df=1+Math.floor(rnd(gs)*10),mv=1+Math.floor(rnd(gs)*10);
+      e.fx=e.fx||[];e.fx.push({k:'curse',t:3,atk:-a,pdef:-df,mdef:-df,mov:-mv});
+      if(e.status.indexOf('cursed')<0)e.status.push('cursed');
+      cells.push({r:e.row,c:e.col});n++;
+    }
+  });
+  if(n===0)return{ok:false,msg:'隣接する敵がいません'};
+  if(typeof spawnMapFx==='function')spawnMapFx({kind:'curse',cells:cells,dur:1100});
+  if(typeof SFX!=='undefined'&&SFX.magic)SFX.magic();
+  addLog(PCOLS[u.owner].name+'の魔女が呪詛！敵'+n+'体を3ターン呪う',{hot:true});
+  return{ok:true,msg:'💀呪詛！隣接する敵'+n+'体を3ターン呪う',hits:n};
+}
+function _fmArcane(gs,u,targetId){
+  var t=null;for(var i=0;i<gs.units.length;i++){if(gs.units[i].id===targetId){t=gs.units[i];break;}}
+  if(!t||t.owner===u.owner||t.hp<=0)return{ok:false,msg:'対象を選択してください'};
+  if(mdist(u.row,u.col,t.row,t.col)>2)return{ok:false,msg:'射程外（2マス以内の敵）'};
+  var base=Math.round(effAtk(u)*1.1);
+  var dmg=Math.max(8,base-effMDef(t)+Math.floor(rnd(gs)*6)-2);
+  dmg=Math.round(dmg*getElemMult('ice',UDEFS[t.type].elem||'none'));
+  if((UDEFS[t.type].elem||'none')==='fire')dmg=Math.round(dmg*1.5); // 火に強い
+  var fromCell={r:u.row,c:u.col},toCell={r:t.row,c:t.col};
+  t.hp-=dmg;var killed=false;
+  if(typeof recalcSquadAlive==='function')recalcSquadAlive(t); // ★分隊更新
+  if(t.hp<=0){
+    gs.stats[u.owner].killed++;gs.stats[t.owner].lost++;
+    if(t.type==='king')gs.stats[u.owner].kingKills=(gs.stats[u.owner].kingKills||0)+1;
+    // ★シナリオ: 氷ミサイルで中央王撃破
+    if(gs.scenarioMode&&t.type==='king'&&t.owner===gs.scenarioGarrisonPid){
+      gs.scenarioKingKiller=u.owner;
+      addLog('❄👑 '+PCOLS[u.owner].name+' の魔法王が中央王を凍結撃破！',{hot:true});
+    }
+    killLevelUp(gs,u,t);killed=true;
+  }
+  else{t.fx=t.fx||[];t.fx.push({k:'curse',t:2,mov:-2});} // 凍結スロー
+  gs.units=gs.units.filter(function(x){return x.hp>0;});
+  if(typeof spawnMapFx==='function')spawnMapFx({kind:'ice',from:fromCell,to:toCell,dur:1050});
+  if(typeof SFX!=='undefined'&&SFX.magic)SFX.magic();
+  addLog(PCOLS[u.owner].name+'の魔法王が氷ミサイル！-'+dmg+(killed?'【撃破】':''),{hot:true});
+  return{ok:true,msg:'❄氷ミサイル！-'+dmg+(killed?' 撃破！':''),hits:1};
+}
+function _fmWeaken(gs,u){
+  var targets=getFieldMagicTargets(gs,u);
+  targets.forEach(function(t){
+    if(t.status.indexOf('weakened')<0)t.status.push('weakened');
+    if(t.status.indexOf('enfeebled')<0)t.status.push('enfeebled');
+  });
+  if(targets.length){
+    var cells=targets.map(function(t){return{r:t.row,c:t.col};});
+    if(typeof spawnMapFx==='function')spawnMapFx({kind:'curse',cells:cells,dur:900});
+    if(typeof SFX!=='undefined'&&SFX.magic)SFX.magic();
+    addLog(UDEFS[u.type].name+'がフィールド魔法！'+targets.length+'体を弱体化',{hot:true});
+  }
+  return{ok:targets.length>0,msg:targets.length?('✨'+targets.length+'体を弱体化！'):'範囲内に敵がいません',hits:targets.length};
+}
+// ===== 海賊: フィールド魔法の強奪 =====
+function doPirateStealAction(gs,uid,victimId){
+  var u=null,v=null;
+  for(var i=0;i<gs.units.length;i++){if(gs.units[i].id===uid)u=gs.units[i];if(gs.units[i].id===victimId)v=gs.units[i];}
+  if(!u||!v||u.type!=='pirate')return{ok:false,msg:'強奪に失敗しました'};
+  if(mdist(u.row,u.col,v.row,v.col)!==1)return{ok:false,msg:'隣接していません'};
+  var spells=fmSpellsFor(v);
+  if(spells.length===0)return{ok:false,msg:'相手はフィールド魔法を持っていません'};
+  u.stolenMagic=u.stolenMagic||[];
+  var got=[];
+  spells.forEach(function(s){if(u.stolenMagic.indexOf(s)<0){u.stolenMagic.push(s);got.push(s);}});
+  v.fmStolen=true;if(v.stolenMagic)v.stolenMagic=[];
+  u.moved=true;u.attacked=true;
+  var names=got.map(function(s){return (FM_SPELLS[s]||{name:s}).name;}).join('・');
+  addLog(PCOLS[u.owner].name+'の海賊が'+UDEFS[v.type].name+'のフィールド魔法を強奪！',{hot:true});
+  if(typeof SFX!=='undefined'&&SFX.capture)SFX.capture();
+  return{ok:true,msg:'🏴強奪成功！'+(names||'魔法')+'を奪った！',got:got};
+}
+
+/* ========================================================================
+ * v10.1: 忍者ステルス
+ * ====================================================================== */
+function isUnitHidden(u){
+  if(!u||u.type!=='ninja'||u.hp<=0)return false;
+  if(!GS)return false;
+  var viewer=(typeof onlineMode!=='undefined'&&onlineMode)?myPeerIdx:GS.turn;
+  if(u.owner===viewer)return false;   // 自分の忍者は常に見える
+  if(u.attacked)return false;          // 攻撃したら姿を現す
+  // スパイを保有するプレイヤーには看破される
+  var hasSpy=GS.units.some(function(s){return s.owner===viewer&&s.type==='spy'&&s.hp>0;});
+  if(hasSpy)return false;
+  return true;
+}
+
+/* ========================================================================
+ * v10.1: ステータス増減量（バフ/デバフの合算）— 表示用
+ * ====================================================================== */
+function statDelta(u){
+  var d={atk:0,pdef:0,mdef:0,mov:0};
+  if(!u)return d;
+  if(u.status){
+    if(u.status.indexOf('cursed')>=0)d.atk-=3;
+    if(u.status.indexOf('weakened')>=0)d.atk-=4;
+  }
+  if(typeof fxSum==='function'){
+    d.atk+=fxSum(u,'atk');d.pdef+=fxSum(u,'pdef');
+    d.mdef+=fxSum(u,'mdef');d.mov+=fxSum(u,'mov');
+  }
+  return d;
+}
+function hasStatDelta(u){
+  var d=statDelta(u);return !!(d.atk||d.pdef||d.mdef||d.mov);
+}
+
 /* ---------- D: 戦闘ビューモード ---------- */
 function setBView(m){
   if(['dual','self','enemy'].indexOf(m)<0)m='dual';

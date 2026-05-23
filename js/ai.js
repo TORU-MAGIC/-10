@@ -10,9 +10,29 @@ function runCPUTurn(pid){
   // オンラインクライアントはCPU処理しない（ホスト権威）
   if(onlineMode&&!isHost){cpuTurnPid=-1;return;}
   cpuTurnPid=pid;
-  var el=document.getElementById('cpuLabel');el.textContent='🤖 '+GS.players[pid].name+' (Lv'+(avgLevel(pid).toFixed(1))+') 思考中...';el.style.display='block';
+  var el=document.getElementById('cpuLabel');
+  // ★シナリオ: 中央軍は専用ラベル
+  var isFortress=(typeof isScenarioGarrison==='function')&&isScenarioGarrison(pid);
+  el.textContent=(isFortress?'⚔ ':'🤖 ')+GS.players[pid].name+' (Lv'+(avgLevel(pid).toFixed(1))+') '+(isFortress?'陣形を構築中…':'思考中...');
+  el.style.display='block';
   setTimeout(function(){
     if(!GS||GS.over){el.style.display='none';cpuTurnPid=-1;return;}
+    // ★シナリオ: 中央軍は専用ターン処理
+    if(isFortress&&typeof runFortressTurn==='function'){
+      // 例外で進行ロック解除されないのを防ぐ try/catch
+      try{
+        runFortressTurn(pid,function(){
+          el.style.display='none';cpuTurnPid=-1;SFX.turnEnd();
+          showTurnDelay(GS.players[pid].name,function(){if(!isPaused)advanceTurn();});
+        });
+      }catch(e){
+        console.error('[scenario] runFortressTurn failed:',e);
+        el.style.display='none';cpuTurnPid=-1;
+        // フォールバック: 何もせずターン進行
+        showTurnDelay(GS.players[pid].name,function(){if(!isPaused)advanceTurn();});
+      }
+      return;
+    }
     cpuProduceAll(pid,function(){cpuSpecialAll(pid,function(){
       var ids=GS.units.filter(function(u){return u.owner===pid&&u.hp>0;}).sort(function(a,b){return (b.level||1)-(a.level||1);}).map(function(u){return u.id;});
       cpuActSeq(pid,ids,0,function(){el.style.display='none';cpuTurnPid=-1;SFX.turnEnd();showTurnDelay(GS.players[pid].name,function(){if(!isPaused)advanceTurn();});});
@@ -30,11 +50,54 @@ function cpuSpecialAll(pid,cb){
       render();updUI();
     }
   });
-  GS.units.filter(function(u){return u.owner===pid&&isMagicUnit(u.type)&&!u.attacked;}).forEach(function(u){
-    if(getFieldMagicTargets(GS,u).length>=2){
-      doFieldMagicAction(GS,u.id);
-      if(onlineMode&&isHost)broadcastAction({type:'field_magic',uid:u.id});
-      render();updUI();
+  // v10.1: フィールド魔法（ユニット別）
+  GS.units.filter(function(u){return u.owner===pid&&typeof canFieldMagic==='function'&&canFieldMagic(u);}).forEach(function(u){
+    var guard=0;
+    while(canFieldMagic(u)&&guard++<3){
+      var spells=fmSpellsFor(u),done=false;
+      for(var si=0;si<spells.length&&!done;si++){
+        var sp=spells[si],opt=null,dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+        if(sp==='mage'){
+          var al=0;dirs.forEach(function(d){var a=uAt(GS,u.row+d[0],u.col+d[1]);if(a&&a.owner===pid&&a.hp>0)al++;});
+          if(al>=1)opt={spell:sp};
+        }else if(sp==='witch'){
+          var en=0;dirs.forEach(function(d){var e=uAt(GS,u.row+d[0],u.col+d[1]);if(e&&e.owner!==pid&&e.hp>0)en++;});
+          if(en>=1)opt={spell:sp};
+        }else if(sp==='dragon'){
+          var bestD=null,bestN=0;
+          dirs.forEach(function(d){var n=0;for(var s=1;s<=3;s++){var nr=u.row+d[0]*s,nc=u.col+d[1]*s;if(nr<0||nr>=ROWS||nc<0||nc>=COLS)break;var t=uAt(GS,nr,nc);if(t&&t.owner!==pid&&t.hp>0)n++;}if(n>bestN){bestN=n;bestD=d;}});
+          if(bestD)opt={spell:sp,dir:{dr:bestD[0],dc:bestD[1]}};
+        }else if(sp==='arcanelord'){
+          var tgt=null;
+          for(var ar=-2;ar<=2&&!tgt;ar++)for(var ac=-2;ac<=2&&!tgt;ac++){
+            if(Math.abs(ar)+Math.abs(ac)===0||Math.abs(ar)+Math.abs(ac)>2)continue;
+            var t2=uAt(GS,u.row+ar,u.col+ac);if(t2&&t2.owner!==pid&&t2.hp>0)tgt=t2;
+          }
+          if(tgt)opt={spell:sp,targetId:tgt.id};
+        }else{
+          if(getFieldMagicTargets(GS,u).length>=2)opt={spell:sp};
+        }
+        if(opt){
+          var r=doFieldMagicAction(GS,u.id,opt);
+          if(r&&r.ok){
+            if(onlineMode&&isHost)broadcastAction({type:'field_magic',uid:u.id,spell:opt.spell,dir:opt.dir,targetId:opt.targetId});
+            render();updUI();done=true;
+          }
+        }
+      }
+      if(!done)break;
+    }
+  });
+  // v10.1: 海賊の強奪
+  GS.units.filter(function(u){return u.owner===pid&&u.type==='pirate'&&!u.attacked;}).forEach(function(u){
+    if(typeof pirateStealTargets!=='function')return;
+    var vics=pirateStealTargets(u);
+    if(vics.length>0){
+      var r=doPirateStealAction(GS,u.id,vics[0].id);
+      if(r&&r.ok){
+        if(onlineMode&&isHost)broadcastAction({type:'pirate_steal',uid:u.id,victimId:vics[0].id});
+        render();updUI();
+      }
     }
   });
   GS.units.filter(function(u){return u.owner===pid&&u.type==='necromancer';}).forEach(function(u){
@@ -93,10 +156,12 @@ function cpuExecAtk(atk,def,cb){
   if(res.isCrit)m+='💥会心';if(res.dkill)m+='【撃破】';if(res.cdmg)m+=' 反撃-'+res.cdmg+(res.ckill?'【撃破】':'');
   addLog(m,{hot:true});
   if(onlineMode&&isHost){broadcastAction({type:'attack',atkId:atk.id,defId:def.id});if(typeof broadcastCursor==='function')broadcastCursor(def.row,def.col);}
-  // CPU対CPU: バトル画面スキップ、人間のターン or 自分が関与する場合のみ表示
+  // CPU対CPU: 既定はスキップ（人間関与時のみ表示）
+  // ★ただし battleSpeedMode==='normal' なら CPU同士も表示（観戦モード対応）
   var humanIsAtk=isHuman(atk.owner),humanIsDef=isHuman(def.owner);
   var iAmInvolved=onlineMode&&(atk.owner===myPeerIdx||def.owner===myPeerIdx);
-  if(humanIsAtk||humanIsDef||iAmInvolved){
+  var showAll=(typeof battleSpeedMode!=='undefined'&&battleSpeedMode==='normal');
+  if(humanIsAtk||humanIsDef||iAmInvolved||showAll){
     showBattle(res,function(){render();updUI();if(GS.over)showGameOver();else cb();});
   }else{render();updUI();if(GS.over)showGameOver();else cb();}
 }

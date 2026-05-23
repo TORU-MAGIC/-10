@@ -117,9 +117,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .b-hpbar{height:100%;border-radius:9px;transition:width .7s cubic-bezier(.4,0,.2,1);position:relative}
 .b-hpbar::after{content:'';position:absolute;inset:0 0 50% 0;background:rgba(255,255,255,.15);border-radius:9px 9px 0 0}
 .b-hptxt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;text-shadow:0 1px 3px #000;font-weight:bold;letter-spacing:1px}
-.b-cvswrap{position:relative;width:clamp(130px,30vw,210px);height:clamp(130px,30vw,210px);filter:drop-shadow(0 0 18px rgba(0,0,0,.9))}
+.b-cvswrap{position:relative;width:clamp(130px,30vw,210px);height:clamp(130px,30vw,210px);min-height:clamp(130px,30vw,210px);filter:drop-shadow(0 0 18px rgba(0,0,0,.9))}
 .b-platform{width:clamp(130px,30vw,210px);height:18px;background:linear-gradient(180deg,rgba(80,80,100,.8),rgba(40,40,60,.6));border-radius:50%;border:1px solid rgba(100,100,140,.4);margin-top:-6px;box-shadow:0 4px 16px rgba(0,0,0,.6)}
-.b-cvs{display:block;width:100%;height:100%;border-radius:10px}
+/* ★旧1体表示用キャンバスは常時非表示（部隊表示 b-squad に置き換え済み） */
+.b-cvs{display:none !important;width:100%;height:100%;border-radius:10px}
 .b-dmg{position:absolute;top:5%;left:50%;transform:translateX(-50%);font-size:clamp(26px,7.5vw,48px);font-weight:bold;pointer-events:none;white-space:nowrap;z-index:10;display:none;animation:dmgPop 1.3s ease-out forwards;text-shadow:0 2px 8px #000}
 @keyframes dmgPop{0%{opacity:1;transform:translateX(-50%) translateY(0) scale(2)}40%{opacity:1;transform:translateX(-50%) translateY(-28px) scale(1.1)}100%{opacity:0;transform:translateX(-50%) translateY(-85px) scale(.6)}}
 .b-crit{position:absolute;top:55%;left:50%;transform:translateX(-50%);font-size:clamp(11px,3vw,16px);font-weight:bold;color:#ffee44;text-shadow:0 0 20px #ffaa00,0 0 40px #ff8800;pointer-events:none;white-space:nowrap;z-index:11;display:none;animation:critPop 1s ease-out forwards}
@@ -196,3 +197,68 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .do-death-r{animation:deathFallR .95s cubic-bezier(.55,.06,.68,.19) forwards;opacity:.08}
 .do-death-l{animation:deathFallL .95s cubic-bezier(.55,.06,.68,.19) forwards;opacity:.08}
 .b-idle-bob{animation:idleBob 1.85s ease-in-out infinite}
+
+/* ===== 分隊バトル表示（大戦略風）===== */
+/* b-squad は b-cvswrap の上にオーバーレイし、個体スプライトを並べる */
+.b-squad{
+  position:absolute; inset:0;
+  display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:center;
+  gap:3%; padding:6%;
+  pointer-events:none; z-index:5;
+}
+.b-squad.right{justify-content:center}
+.b-squad-unit{
+  position:relative;
+  flex:0 0 auto;
+  display:flex; align-items:center; justify-content:center;
+  transition:opacity .4s, filter .4s, transform .25s;
+}
+.b-squad-unit canvas{
+  display:block; width:100%; height:100%;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.7));
+}
+/* 損失個体: 灰色化 + 半透明 + 倒れたアニメ */
+.b-squad-unit.lost{
+  opacity:.18;
+  filter:grayscale(1) brightness(.4);
+  transform:rotate(45deg) translateY(8px);
+}
+/* 個別攻撃アニメ（左→右へ突進） */
+@keyframes squadAtkL{
+  0%{transform:translate(0,0) scale(1)}
+  40%{transform:translate(18%,-8%) scale(1.12)}
+  100%{transform:translate(0,0) scale(1)}
+}
+@keyframes squadAtkR{
+  0%{transform:translate(0,0) scale(1)}
+  40%{transform:translate(-18%,-8%) scale(1.12)}
+  100%{transform:translate(0,0) scale(1)}
+}
+.b-squad-unit.atk-l{animation:squadAtkL .42s cubic-bezier(.4,0,.2,1)}
+.b-squad-unit.atk-r{animation:squadAtkR .42s cubic-bezier(.4,0,.2,1)}
+/* 被弾フラッシュ */
+@keyframes squadHit{
+  0%{filter:brightness(1)}
+  20%{filter:brightness(3) saturate(0)}
+  100%{filter:brightness(1)}
+}
+.b-squad-unit.hit{animation:squadHit .35s ease}
+/* 死亡アニメ */
+@keyframes squadDie{
+  0%{opacity:1;transform:rotate(0) scale(1)}
+  100%{opacity:.18;transform:rotate(45deg) scale(.8) translateY(10px)}
+}
+.b-squad-unit.dying{animation:squadDie .55s cubic-bezier(.4,0,.2,1) forwards}
+/* 部隊情報バッジ（右下の◆×N表示） */
+.b-squad-info{
+  position:absolute; bottom:-4px; left:50%; transform:translateX(-50%);
+  background:rgba(4,8,20,.92);
+  border:1px solid rgba(80,140,220,.5);
+  border-radius:10px;
+  padding:1px 7px;
+  font-size:9px; font-weight:bold;
+  color:#cce0ff;
+  z-index:6; pointer-events:none;
+  white-space:nowrap;
+}
+.b-squad-info.right{left:auto;right:8%;transform:none}
