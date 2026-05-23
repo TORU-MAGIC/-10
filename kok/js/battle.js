@@ -7,6 +7,135 @@
 var battleCb=null,battleSkip=false;
 var _RANGED=['archer','catapult','necromancer','mage','witch','arcanelord','phoenix','healer','monk'];
 
+/* ========================================================================
+ *  分隊バトル表示: b-squad に複数の個体スプライトを並べる
+ *    side: 'L' | 'R'  type: ユニット種別  color: PCOLS.main
+ *    sqSize: 部隊総数  sqAlive: 生存個体数
+ * ====================================================================== */
+function buildSquadDisplay(side, type, color, sqSize, sqAlive, isRight){
+  // ★メインキャンバスを完全に非表示（display:none） — 1体表示の残存を防ぐ
+  var mainCvs=document.getElementById(side==='L'?'bLCvs':'bRCvs');
+  if(mainCvs){mainCvs.style.display='none';mainCvs.style.opacity='0';}
+  var squadEl=document.getElementById(side==='L'?'bLSquad':'bRSquad');
+  if(!squadEl)return null;
+  // ★ガード: 異常値を補正（最低5体、negative防止）
+  sqSize=Math.max(1,Math.min(10,sqSize|0));
+  if(sqAlive==null||isNaN(sqAlive)||sqAlive<0)sqAlive=sqSize;
+  sqAlive=Math.min(sqAlive,sqSize);
+  squadEl.innerHTML='';
+  squadEl.classList.toggle('right', !!isRight);
+  // 個体サイズ: 部隊サイズによって変える（少ない=大きい）
+  var unitPct;
+  if(sqSize<=2)unitPct=42;       // 大型: 42% × 2
+  else if(sqSize<=4)unitPct=28;  // 中型: 28% × 4
+  else unitPct=22;               // 小型: 22% × 5
+  // 個体を生成
+  for(var i=0;i<sqSize;i++){
+    var div=document.createElement('div');
+    div.className='b-squad-unit';
+    div.id=(side==='L'?'bLSq':'bRSq')+i;
+    div.style.width=unitPct+'%';
+    div.style.height=unitPct+'%';
+    // 損失個体は最初から灰色
+    if(i>=sqAlive)div.classList.add('lost');
+    var cv=document.createElement('canvas');
+    cv.width=120;cv.height=120;
+    div.appendChild(cv);
+    squadEl.appendChild(div);
+    // スプライト描画（drawSprite は既存関数）
+    if(typeof drawSprite==='function'){
+      try{drawSprite(cv, type, color, !!isRight);}catch(e){}
+    }
+  }
+  // 部隊情報バッジを追加
+  var info=document.createElement('div');
+  info.className='b-squad-info'+(isRight?' right':'');
+  info.id=side==='L'?'bLSqInfo':'bRSqInfo';
+  var sym=sqSize<=2?'🔱':sqSize<=4?'⚔':'👥';
+  info.textContent=sym+' '+sqAlive+'/'+sqSize;
+  squadEl.appendChild(info);
+  return squadEl;
+}
+
+// フォールバック: buildSquadDisplay が例外で失敗した場合に最低1体だけ表示
+function buildSquadDisplayFallback(side, type, color, isRight){
+  var squadEl=document.getElementById(side==='L'?'bLSquad':'bRSquad');
+  if(!squadEl)return;
+  squadEl.innerHTML='';
+  var div=document.createElement('div');
+  div.className='b-squad-unit';
+  div.style.width='55%';
+  div.style.height='55%';
+  var cv=document.createElement('canvas');
+  cv.width=140;cv.height=140;
+  div.appendChild(cv);
+  squadEl.appendChild(div);
+  try{if(typeof drawSprite==='function')drawSprite(cv, type, color, !!isRight);}catch(e){}
+}
+
+// 生存個体に攻撃モーションを順次適用
+function playSquadAttack(side, sqAlive, isRight, onComplete){
+  var prefix=side==='L'?'bLSq':'bRSq';
+  var animCls=side==='L'?'atk-l':'atk-r';
+  var staggerMs=70;
+  var animDur=420;
+  for(var i=0;i<sqAlive;i++){
+    (function(idx){
+      setTimeout(function(){
+        var el=document.getElementById(prefix+idx);
+        if(!el||el.classList.contains('lost'))return;
+        el.classList.remove(animCls);void el.offsetWidth;el.classList.add(animCls);
+        setTimeout(function(){if(el)el.classList.remove(animCls);},animDur);
+      },idx*staggerMs);
+    })(i);
+  }
+  if(onComplete)setTimeout(onComplete, sqAlive*staggerMs+animDur);
+}
+
+// 被弾フラッシュを全生存個体に適用
+function playSquadHit(side, sqAlive){
+  var prefix=side==='L'?'bLSq':'bRSq';
+  for(var i=0;i<sqAlive;i++){
+    var el=document.getElementById(prefix+i);
+    if(!el||el.classList.contains('lost'))continue;
+    el.classList.remove('hit');void el.offsetWidth;el.classList.add('hit');
+    setTimeout((function(e){return function(){if(e)e.classList.remove('hit');};})(el),360);
+  }
+}
+
+// 個体数更新（戦闘中に個体数が減ったときに損失アニメ）
+function updateSquadAfter(side, sqBef, sqAft, sqSize){
+  var prefix=side==='L'?'bLSq':'bRSq';
+  // sqAft 以降の個体を「死亡」状態に
+  for(var i=Math.max(0,sqAft);i<sqBef;i++){
+    var el=document.getElementById(prefix+i);
+    if(!el)continue;
+    el.classList.add('dying');
+    setTimeout((function(e){return function(){if(e){e.classList.remove('dying');e.classList.add('lost');}};})(el),550);
+  }
+  // バッジ更新
+  var infoId=side==='L'?'bLSqInfo':'bRSqInfo';
+  var info=document.getElementById(infoId);
+  if(info){
+    var sym=sqSize<=2?'🔱':sqSize<=4?'⚔':'👥';
+    info.textContent=sym+' '+Math.max(0,sqAft)+'/'+sqSize;
+    // 全滅時は赤、減少時は黄
+    if(sqAft<=0)info.style.color='#ff7070';
+    else if(sqAft<sqBef)info.style.color='#ffcc44';
+  }
+}
+
+// 戦闘終了時のクリーンアップ
+function clearSquadDisplay(){
+  ['bLSquad','bRSquad'].forEach(function(id){
+    var el=document.getElementById(id);if(el)el.innerHTML='';
+  });
+  // メインキャンバスも非表示のままに（次回の戦闘開始時に再度 buildSquadDisplay で制御）
+  ['bLCvs','bRCvs'].forEach(function(id){
+    var el=document.getElementById(id);if(el){el.style.opacity='';el.style.display='';}
+  });
+}
+
 /* ===== HPバー スムーズドレイン ===== */
 function animateHPBar(barId,txtId,fromPct,toPct,fromHp,toHp,maxHp,dur){
   var bar=document.getElementById(barId),txt=document.getElementById(txtId);
@@ -42,6 +171,19 @@ function showBattle(res,cb){
   if(onlineMode){var iAmInv=(res.atkOwner===myPeerIdx||res.defOwner===myPeerIdx);if(!iAmInv&&isCpuBattle&&battleSpeedMode==='skip'){if(cb)cb();return;}}
   if(battleSpeedMode==='skip'&&isCpuBattle){if(cb)cb();return;}
   battleCb=cb;battleSkip=false;
+  // ★最優先で旧スプライト表示を消す（buildSquadDisplay が失敗しても1体表示にならない）
+  var _bLC=document.getElementById('bLCvs'); if(_bLC){_bLC.style.display='none';_bLC.style.opacity='0';}
+  var _bRC=document.getElementById('bRCvs'); if(_bRC){_bRC.style.display='none';_bRC.style.opacity='0';}
+  // ★安全弁: 演出中に例外が出ても必ず終了するよう、最大3.5秒で強制終了タイマー
+  var _safetyTimer=setTimeout(function(){
+    if(battleCb){
+      console.warn('[battle] safety timeout — forcing endBattle');
+      try{endBattle();}catch(e){if(battleCb){var f=battleCb;battleCb=null;f();}}
+    }
+  },3500);
+  // 元の battleCb をラップして safetyTimer をクリア
+  var _origCb=battleCb;
+  battleCb=function(){clearTimeout(_safetyTimer);if(_origCb)_origCb();};
 
   var bs=document.getElementById('battleScreen');bs.classList.add('active');
   startBBGLoop(res.tid||0);startPLoop();
@@ -58,7 +200,7 @@ function showBattle(res,cb){
   document.getElementById('bAffinityTxt').style.color=al.col;
   document.getElementById('bRoundLbl').textContent='ROUND '+(GS?GS.round:1);
 
-  var lac=PCOLS[res.atkOwner];
+  var lac=PCOLS[res.atkOwner]||PCOLS[0];
   document.getElementById('bLName').textContent=lac.name+' '+UDEFS[res.atkType].name;
   document.getElementById('bLName').style.color=lac.light;
   var lBarEl=document.getElementById('bLBar');
@@ -68,9 +210,9 @@ function showBattle(res,cb){
   document.getElementById('bLTxt').textContent=res.atkHpBef+'/'+res.atkMhp;
   var atkTypeSt=(UDEFS[res.atkType]&&UDEFS[res.atkType].atkType==='magic')?' ✨魔法':' ⚔物理';
   document.getElementById('bLStatus').textContent=ei1.name+atkTypeSt+(res.atkStatus&&res.atkStatus.length?' 状態:'+res.atkStatus.join(','):'');
-  drawSprite(document.getElementById('bLCvs'),res.atkType,lac.main,false);
+  // ★旧1体スプライト描画は削除（分隊表示が代替する）
 
-  var rac=PCOLS[res.defOwner];
+  var rac=PCOLS[res.defOwner]||PCOLS[0];
   document.getElementById('bRName').textContent=rac.name+' '+UDEFS[res.defType].name;
   document.getElementById('bRName').style.color=rac.light;
   var rBarEl=document.getElementById('bRBar');
@@ -79,13 +221,30 @@ function showBattle(res,cb){
   rBarEl.style.background='linear-gradient(90deg,'+rac.dark+','+rac.main+','+rac.light+')';
   document.getElementById('bRTxt').textContent=res.defHpBef+'/'+res.defMhp;
   document.getElementById('bRStatus').textContent=ei2.name+(res.defStatus&&res.defStatus.length?' ['+res.defStatus.join(',')+']':'');
-  drawSprite(document.getElementById('bRCvs'),res.defType,rac.main,true);
+  // ★旧1体スプライト描画は削除
   document.getElementById('bLog').textContent='';
 
-  // アイドルボブ（スプライトが静止せず軽く上下する）
-  var lCvs=document.getElementById('bLCvs'),rCvs=document.getElementById('bRCvs');
-  if(lCvs){lCvs.classList.remove('b-idle-bob');void lCvs.offsetWidth;lCvs.classList.add('b-idle-bob');}
-  if(rCvs){rCvs.classList.remove('b-idle-bob');void rCvs.offsetWidth;rCvs.classList.add('b-idle-bob');}
+  // ★分隊表示: メインキャンバスの代わりに部隊全個体を並べる
+  // res に分隊情報が無い場合は getSquadSize でフォールバック
+  var atkSqSize=res.atkSquadSize||(typeof getSquadSize==='function'?getSquadSize(res.atkType):5);
+  var atkSqBef =res.atkSquadBef!=null?res.atkSquadBef:atkSqSize;
+  var defSqSize=res.defSquadSize||(typeof getSquadSize==='function'?getSquadSize(res.defType):5);
+  var defSqBef =res.defSquadBef!=null?res.defSquadBef:defSqSize;
+  // ★安全化: 異常値（0,NaN,負）は最低値で補正
+  if(!atkSqSize||atkSqSize<1)atkSqSize=5;
+  if(!defSqSize||defSqSize<1)defSqSize=5;
+  if(atkSqBef<0||isNaN(atkSqBef))atkSqBef=atkSqSize;
+  if(defSqBef<0||isNaN(defSqBef))defSqBef=defSqSize;
+  // ★例外で showBattle の setTimeout 連鎖が止まらないよう try/catch + フォールバック
+  try{buildSquadDisplay('L', res.atkType, lac.main, atkSqSize, atkSqBef, false);}
+  catch(e){console.warn('buildSquadDisplay L failed:',e);buildSquadDisplayFallback('L', res.atkType, lac.main, false);}
+  try{buildSquadDisplay('R', res.defType, rac.main, defSqSize, defSqBef, true);}
+  catch(e){console.warn('buildSquadDisplay R failed:',e);buildSquadDisplayFallback('R', res.defType, rac.main, true);}
+
+  // アイドルボブ（部隊全体が静止せず軽く上下する）
+  var lSq=document.getElementById('bLSquad'),rSq=document.getElementById('bRSquad');
+  if(lSq){lSq.classList.remove('b-idle-bob');void lSq.offsetWidth;lSq.classList.add('b-idle-bob');}
+  if(rSq){rSq.classList.remove('b-idle-bob');void rSq.offsetWidth;rSq.classList.add('b-idle-bob');}
 
   SFX.sfxFor(res.atkType);
 
@@ -111,10 +270,12 @@ function showBattle(res,cb){
 
   /* ===== Step 0: 攻撃フェーズ ===== */
 
-  // チャージ（攻撃者が踏み込む）
+  // チャージ（攻撃者が踏み込む）+ ★分隊個別の攻撃モーション
   setTimeout(function(){
     if(battleSkip)return;
     lw.classList.remove('do-charge-l');void lw.offsetWidth;lw.classList.add('do-charge-l');
+    // 攻撃側の生存個体を順次アタックモーション
+    playSquadAttack('L', atkSqBef, false);
   },tCharge);
 
   // プロジェクタイル or 斬撃軌跡
@@ -136,6 +297,12 @@ function showBattle(res,cb){
     spawnElementBurst(rc.x,rc.y,res.atkElem,res.isCrit);
     spawnShockwave(rc.x,rc.y,ei1.col,res.isCrit?95:65);
     if(res.isCrit){SFX.crit();applyCritZoom('R');}
+    // ★分隊: 被弾フラッシュ + 個体数減少アニメ
+    playSquadHit('R', defSqBef);
+    var defSqAft=res.defSquadAft!=null?res.defSquadAft:defSqBef;
+    if(defSqAft<defSqBef){
+      setTimeout(function(){updateSquadAfter('R', defSqBef, defSqAft, defSqSize);},200);
+    }
     var dt=res.isCrit?'💥'+res.dmg:(res.elemMult>=1.4?'⚡'+res.dmg:'-'+res.dmg);
     var dc=res.isCrit?'#ffee22':(res.affMult>=3?'#f0c840':lac.light);
     showDmg('bRDmg',dt,dc);
@@ -181,6 +348,9 @@ function showBattle(res,cb){
     var lc=getC(lw),rc=getC(rw);
     rw.classList.remove('do-charge-r');void rw.offsetWidth;rw.classList.add('do-charge-r');
     SFX.sfxFor(res.defType);
+    // ★分隊: 防御側の生存個体が順次反撃モーション
+    var defSqAft1=res.defSquadAft!=null?res.defSquadAft:defSqBef;
+    playSquadAttack('R', defSqAft1, true);
     if(_RANGED.indexOf(res.defType)>=0){spawnProjectileArc(rc.x,rc.y,lc.x,lc.y,ei2.col,8,cProjDur);}
     else{spawnMeleeSlash(rc.x,rc.y,lc.x,lc.y,rac.main);}
     setTimeout(function(){
@@ -194,6 +364,12 @@ function showBattle(res,cb){
       spawnShockwave(lc2.x,lc2.y,ei2.col,res.isCritC?90:58);
       if(res.isCritC){SFX.crit();applyCritZoom('L');showDmg('bLDmg','💥'+res.cdmg,rac.light);}
       else showDmg('bLDmg','-'+res.cdmg,rac.light);
+      // ★分隊: 攻撃側の被弾と個体損失
+      playSquadHit('L', atkSqBef);
+      var atkSqAft=res.atkSquadAft!=null?res.atkSquadAft:atkSqBef;
+      if(atkSqAft<atkSqBef){
+        setTimeout(function(){updateSquadAfter('L', atkSqBef, atkSqAft, atkSqSize);},200);
+      }
       animateHPBar('bLBar','bLTxt',
         res.atkHpBef/res.atkMhp*100,res.atkHpAft/res.atkMhp*100,
         res.atkHpBef,res.atkHpAft,res.atkMhp,Math.round(640*T));
@@ -221,6 +397,8 @@ function showDmg(id,txt,col){
 
 function endBattle(){
   var bs=document.getElementById('battleScreen');bs.classList.remove('active');
+  // ★分隊表示のクリーンアップ
+  if(typeof clearSquadDisplay==='function')clearSquadDisplay();
   ['bLWrap','bRWrap'].forEach(function(id){
     var el=document.getElementById(id);if(!el)return;
     el.style.opacity='1';
@@ -232,7 +410,7 @@ function endBattle(){
     var el=document.getElementById(id);if(el)el.style.display='none';
   });
   // アイドルボブ解除
-  ['bLCvs','bRCvs'].forEach(function(id){
+  ['bLSquad','bRSquad','bLCvs','bRCvs'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.classList.remove('b-idle-bob');
   });
   // hp-lost 残像フェードアウト
